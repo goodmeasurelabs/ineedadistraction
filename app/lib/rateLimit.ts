@@ -20,12 +20,12 @@ export type RateLimitResult = {
   ok: boolean;
   remaining: number;
   retryAfterSec: number;
+  unavailable?: boolean;
 };
 
 // Identify the caller as fairly as we can:
 //   1. Clerk userId when signed in (per-account limit)
-//   2. the X-Client-Id guest cookie/header when present
-//   3. the request IP (hardest to rotate for casual abuse)
+//   2. the platform-forwarded request IP
 // Signed-in users get a real per-user budget; anonymous callers are capped
 // per IP so clearing localStorage / going incognito doesn't reset the count.
 async function callerIdentity(req: Request): Promise<string> {
@@ -35,9 +35,7 @@ async function callerIdentity(req: Request): Promise<string> {
   } catch {
     // auth() can throw outside a request scope — fall through to header/IP
   }
-  const clientId = req.headers.get('x-client-id');
-  if (clientId) return `c:${clientId}`;
-  const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim();
+  const ip = (req.headers.get('x-vercel-forwarded-for') || req.headers.get('x-forwarded-for') || '').split(',')[0].trim();
   return ip ? `ip:${ip}` : 'anon';
 }
 
@@ -67,10 +65,8 @@ export async function rateLimit(req: Request, opts: RateLimitOptions): Promise<R
       retryAfterSec: Math.max(1, Math.ceil((resetMs - Date.now()) / 1000)),
     };
   } catch (err) {
-    // Fail OPEN — a limiter/DB hiccup must never block a paying user from
-    // generating. Abuse protection is best-effort, availability comes first.
-    console.error('[rateLimit] failed, allowing request', err);
-    return { ok: true, remaining: opts.limit, retryAfterSec: 0 };
+    console.error('[rateLimit] unavailable', err);
+    return { ok: false, remaining: 0, retryAfterSec: 30, unavailable: true };
   }
 }
 
@@ -84,7 +80,7 @@ export async function enforceRateLimit(
   const result = await rateLimit(req, opts);
   if (result.ok) return null;
   return NextResponse.json(
-    { error: message },
-    { status: 429, headers: { 'Retry-After': String(result.retryAfterSec) } },
+    { error: result.unavailable ? 'Creation is temporarily unavailable. Your game is safe — try again shortly.' : message },
+    { status: result.unavailable ? 503 : 429, headers: { 'Retry-After': String(result.retryAfterSec) } },
   );
 }

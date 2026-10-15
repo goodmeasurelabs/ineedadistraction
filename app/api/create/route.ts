@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { compactHtml, extractHtmlDocument } from '@/app/lib/htmlCompact';
 import { enforceRateLimit } from '@/app/lib/rateLimit';
+import { generateWithAstra, usesAstra } from '@/app/lib/astra';
 
 // Pro plan caps maxDuration; Hobby silently clamps to 60. 300s = headroom for
 // outlier first-generations of complex games; the typical one finishes in 30-60s.
@@ -103,10 +104,12 @@ Combine techniques freely: SVG characters + canvas backgrounds + CSS particle ef
 const VALIDATION_PROMPT = `You are a QA engineer reviewing an HTML browser game for critical bugs.
 
 Analyze the HTML/JS and check ONLY these four things:
-1. Do all visible buttons have JavaScript click event listeners?
+1. Do interactive controls have working event handlers? Pointer/touch handlers, inline handlers, and event delegation are valid.
 2. Does the main game start / loop activate when the player interacts (clicks Start, etc.)?
-3. Are all DOM element IDs referenced in JavaScript also present in the HTML?
+3. Are referenced DOM elements present in the HTML or created dynamically before use?
 4. For canvas games: is ctx.clearRect (or equivalent) called in the game loop?
+
+Report only definite functional bugs, not preferences. Read the complete document including scripts near the end before concluding that a handler or element is missing.
 
 Return ONLY valid JSON — no explanation:
 {"valid": true}
@@ -136,11 +139,12 @@ function isCreditExhausted(err: unknown): boolean {
 // Retry transient API failures (overload/5xx). Only retry the *request* phase — once
 // Sonnet starts streaming a response and errors out mid-way, the SDK surfaces it here
 // and we fail fast rather than wait 30+ seconds per attempt. Total retry budget ~7s.
-async function callSonnetWithRetry(userMessage: string) {
+async function callGameModelWithRetry(userMessage: string, signal?: AbortSignal) {
   const delays = [500, 1500]; // 2 retries only — if overloaded persists, fail fast
   let lastErr: unknown;
   for (let attempt = 0; attempt <= delays.length; attempt++) {
     try {
+      if (usesAstra()) return await generateWithAstra(SYSTEM_PROMPT, userMessage, signal);
       // Stream under the hood — non-streaming requests with max_tokens this
       // high get rejected by the SDK as potentially exceeding 10 min. The
       // returned Message has the same shape (.content, .stop_reason, .usage).
@@ -150,7 +154,7 @@ async function callSonnetWithRetry(userMessage: string) {
           max_tokens: 24000,
           messages: [{ role: 'user', content: userMessage }],
           system: SYSTEM_PROMPT,
-        })
+        }, { signal })
         .finalMessage();
     } catch (err) {
       lastErr = err;
@@ -167,8 +171,8 @@ async function callSonnetWithRetry(userMessage: string) {
   throw lastErr;
 }
 
-async function generateGame(userMessage: string): Promise<string> {
-  const message = await callSonnetWithRetry(userMessage);
+async function generateGame(userMessage: string, signal?: AbortSignal): Promise<string> {
+  const message = await callGameModelWithRetry(userMessage, signal);
 
   // If Claude hit the token ceiling, the HTML is guaranteed incomplete —
   // closing tags and event wiring typically fall in the tail of the file.
@@ -223,7 +227,7 @@ async function validateGame(html: string): Promise<string[]> {
       max_tokens: 300,
       messages: [{
         role: 'user',
-        content: `${html.slice(0, 6000)}\n\n---\nReview the game above for the four checks and return JSON only.`,
+        content: `${html}\n\n---\nReview the game above for the four checks and return JSON only.`,
       }],
       system: VALIDATION_PROMPT,
     });
@@ -255,9 +259,11 @@ export async function POST(req: Request) {
 
   const { prompt, baseHtml, plan } = await req.json();
 
-  if (!prompt) {
-    return NextResponse.json({ error: 'prompt is required' }, { status: 400 });
+  if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 8000 || (baseHtml !== undefined && (typeof baseHtml !== 'string' || baseHtml.length > 500000))) {
+    return NextResponse.json({ error: 'Send an idea of 1–8,000 characters and a game under 500 KB.' }, { status: 400 });
   }
+
+  if (plan !== undefined && plan !== null && (typeof plan !== 'object' || !Array.isArray(plan.steps) || plan.steps.length > 8 || plan.steps.some((s: unknown) => typeof s !== 'string' || s.length > 2000) || (plan.summary !== undefined && (typeof plan.summary !== 'string' || plan.summary.length > 4000)))) return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });
 
   const planBlock = plan && Array.isArray(plan.steps)
     ? `\n\nThe user approved this gameplan — implement all steps:\n${plan.summary ? `• ${plan.summary}\n` : ''}${plan.steps.map((s: string) => `  - ${s}`).join('\n')}`
@@ -277,13 +283,13 @@ export async function POST(req: Request) {
     // ── First attempt ─────────────────────────────────────────────────────────
     let html: string;
     try {
-      html = await generateGame(userMessage);
+      html = await generateGame(userMessage, req.signal);
     } catch (err) {
       // Retry once on truncation — sometimes Claude just rambles on the first try
       if (err instanceof TruncatedOutputError) {
         truncationRetried = true;
         const terseRetry = `${userMessage}\n\nIMPORTANT: Keep the code TIGHT. Inline styles, minimal whitespace, no comments. The full document must fit within 16k tokens.`;
-        html = await generateGame(terseRetry);
+        html = await generateGame(terseRetry, req.signal);
       } else {
         throw err;
       }
@@ -294,31 +300,31 @@ export async function POST(req: Request) {
     }
 
     // ── Validate ──────────────────────────────────────────────────────────────
-    const issues = await validateGame(html);
+    const [issues, initialMeta] = await Promise.all([validateGame(html), extractMeta(html)]);
+    let meta = initialMeta;
 
     // ── Retry once if bugs found ──────────────────────────────────────────────
     if (issues.length > 0) {
       validationRetried = true;
-      const retryMessage = `${userMessage}
+      const retryMessage = `Repair this complete browser game. Preserve its appearance and mechanics; change only the definite bugs listed below. Return the entire corrected HTML document, without markdown.
 
-IMPORTANT: A previous generation attempt had these bugs — fix all of them:
-${issues.map((i) => `• ${i}`).join('\n')}
+${html}
 
-Generate a corrected, fully working version.`;
+Issues to fix:
+${issues.map((i) => `• ${i}`).join('\n')}`;
 
       try {
-        html = await generateGame(retryMessage);
+        html = await generateGame(retryMessage, req.signal);
+        meta = await extractMeta(html);
       } catch (err) {
         // If the retry truncates, keep the first (imperfect but complete) version
         if (!(err instanceof TruncatedOutputError)) throw err;
       }
     }
 
-    // ── Extract title + how-to-play (runs in parallel with nothing else, fast) ─
-    const meta = await extractMeta(html);
-
     console.log(JSON.stringify({
       event: 'create_done',
+      model: usesAstra() ? 'gpt-6-astra' : 'claude-sonnet-4-6',
       isRemix: !!baseHtml,
       promptBytes: prompt.length,
       baseHtmlBytes: compactedBase.length,
@@ -346,7 +352,7 @@ Generate a corrected, fully working version.`;
       return NextResponse.json({ error: 'Your game was too ambitious to fit in one generation — try a simpler prompt or break it into smaller remixes.' }, { status: 500 });
     }
     if (err instanceof CreditExhaustedError) {
-      return NextResponse.json({ error: "AI service is temporarily unavailable. The site owner has been notified." }, { status: 503 });
+      return NextResponse.json({ error: "AI service is temporarily unavailable. Please try again later." }, { status: 503 });
     }
     if (err instanceof OverloadedError) {
       return NextResponse.json({ error: "Anthropic's servers are slammed right now. Give it 30 seconds and try again — your draft is saved." }, { status: 503 });

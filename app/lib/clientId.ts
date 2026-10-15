@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 
 const KEY = 'inad_client_id';
+let memoryId: string | null = null;
 
 // crypto.randomUUID requires a secure context; fall back for http contexts
 // (e.g. accessing the dev server via a LAN IP or non-localhost hostname).
@@ -21,17 +22,18 @@ function generateUUID(): string {
 // Safe to call from client components only — returns null during SSR.
 export function getClientId(): string | null {
   if (typeof window === 'undefined') return null;
-  let id = localStorage.getItem(KEY);
-  if (!id) {
-    id = generateUUID();
+  try {
+    const id = localStorage.getItem(KEY) || memoryId || generateUUID();
+    memoryId = id;
     localStorage.setItem(KEY, id);
-  }
-  return id;
+    return id;
+  } catch { return memoryId ??= generateUUID(); }
 }
 
 export function clearClientId(): void {
   if (typeof window === 'undefined') return;
-  localStorage.removeItem(KEY);
+  memoryId = null;
+  try { localStorage.removeItem(KEY); } catch { /* Storage can be disabled. */ }
 }
 
 // React hook: returns the clientId after hydration (null during SSR).

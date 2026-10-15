@@ -3,7 +3,7 @@ import { ImageResponse } from 'next/og';
 export const runtime = 'nodejs';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
-export const alt = 'I Need a Distraction — AI brain games you can build and remix in seconds';
+export const alt = 'I Need a Distraction — tiny games, happy accidents';
 
 // Site-wide default OG image (homepage / dashboard / any page without its own).
 export default function OGImage() {
@@ -15,7 +15,7 @@ export default function OGImage() {
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          background: 'linear-gradient(135deg, #1e0838 0%, #0a0612 50%, #2a0a3a 100%)',
+          background: 'linear-gradient(135deg, #1c2a20 0%, #111715 50%, #243125 100%)',
           padding: '72px',
           fontFamily: 'sans-serif',
           position: 'relative',
@@ -24,7 +24,7 @@ export default function OGImage() {
         <div
           style={{
             position: 'absolute', top: -140, right: -120, width: 420, height: 420, borderRadius: 9999,
-            background: 'radial-gradient(circle, rgba(168,85,247,0.38) 0%, transparent 70%)', display: 'flex',
+            background: 'radial-gradient(circle, rgba(218,246,151,0.2) 0%, transparent 70%)', display: 'flex',
           }}
         />
         <div
@@ -34,8 +34,8 @@ export default function OGImage() {
           }}
         />
 
-        <div style={{ display: 'flex', alignItems: 'center', fontSize: 26, fontWeight: 600, color: '#c084fc', zIndex: 10 }}>
-          ⚡ ineedadistraction
+        <div style={{ display: 'flex', alignItems: 'center', fontSize: 26, fontWeight: 600, color: '#dcf998', zIndex: 10 }}>
+          ✳ i need a distraction.
         </div>
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', zIndex: 10 }}>
@@ -45,10 +45,10 @@ export default function OGImage() {
               lineHeight: 1.02, display: 'flex', flexWrap: 'wrap', maxWidth: 1040,
             }}
           >
-            Brain games you build & remix.
+            Less scrolling. More oh, wow.
           </div>
-          <div style={{ marginTop: 26, fontSize: 38, color: '#e9d5ff', fontWeight: 500, display: 'flex', maxWidth: 960 }}>
-            Describe a clever little game — AI builds it in 60 seconds. Play, remix, share.
+          <div style={{ marginTop: 26, fontSize: 38, color: '#c9d5bd', fontWeight: 500, display: 'flex', maxWidth: 960 }}>
+            Tiny games. Happy accidents. Play instantly, then make it your own.
           </div>
         </div>
 
@@ -56,12 +56,12 @@ export default function OGImage() {
           <div
             style={{
               display: 'flex', alignItems: 'center', gap: 12,
-              background: 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)', color: '#ffffff',
+              background: '#dcf998', color: '#17221b',
               padding: '14px 26px', borderRadius: 999, fontSize: 27, fontWeight: 700,
-              boxShadow: '0 10px 30px -10px rgba(168,85,247,0.5)',
+              boxShadow: '0 10px 30px -10px rgba(218,246,151,0.15)',
             }}
           >
-            ✨ Create a game
+            Play a little ↗
           </div>
           <div style={{ display: 'flex', fontSize: 24, color: '#9ca3af' }}>ineedadistraction.com</div>
         </div>

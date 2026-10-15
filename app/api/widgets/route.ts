@@ -1,3 +1,7 @@
+import { prisma } from '@/app/lib/prisma';
+import { getTemplate } from '@/app/lib/templates';
+import { validateGame } from '@/app/lib/publishValidation';
+import { enforceRateLimit } from '@/app/lib/rateLimit';
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { getWidgets, getWidgetsByUser, addWidget } from '@/app/lib/store';
@@ -25,11 +29,21 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const { userId } = await auth();
-    const body = await req.json();
+    if (!userId) return NextResponse.json({ error: 'Sign in to publish and own your game.' }, { status: 401 });
+    const limited = await enforceRateLimit(req, { name: 'publish', limit: 10, windowSec: 3600 });
+    if (limited) return limited;
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return NextResponse.json({ error: 'Invalid game' }, { status: 400 });
+    const invalid = validateGame(body);
+    if (invalid) return NextResponse.json({ error: invalid }, { status: 400 });
     const { title, description, emoji, html, author, tags, remixable, parentId } = body;
 
-    if (!title || !html) {
-      return NextResponse.json({ error: 'title and html are required' }, { status: 400 });
+    let resolvedParentId: string | undefined;
+    if (parentId) {
+      if (typeof parentId !== 'string' || parentId.length > 100) return NextResponse.json({ error: 'Invalid parent game' }, { status: 400 });
+      const parent = await prisma.widget.findUnique({ where: { id: parentId } });
+      if (parent && parent.published && parent.remixable) resolvedParentId = parent.id;
+      else if (parent || !getTemplate(parentId)) return NextResponse.json({ error: 'This game is unavailable for remixing.' }, { status: 400 });
     }
 
     const widget = await addWidget({
@@ -40,9 +54,9 @@ export async function POST(req: Request) {
       html,
       author: author ?? 'Anonymous',
       tags: tags ?? [],
-      userId: userId ?? undefined, // attach Clerk user ID if signed in
+      userId,
       remixable: remixable ?? true,
-      parentId: typeof parentId === 'string' ? parentId : undefined,
+      parentId: resolvedParentId,
     });
 
     return NextResponse.json(widget, { status: 201 });

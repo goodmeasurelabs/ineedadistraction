@@ -11,6 +11,7 @@ export type Widget = {
   emoji: string;
   type: 'builtin' | 'user-created';
   html?: string;
+  hasHtml?: boolean;
   component?: string;
   votes: number;
   createdAt: number;
@@ -112,89 +113,14 @@ function legacyToWidget(row: LegacyWidgetRow): Widget {
 }
 
 const FALLBACK_WIDGETS: Widget[] = [
-  {
-    id: 'wordle',
-    title: 'Word Sprint',
-    description: 'Decode the 5-letter word in 6 tries and keep your solving streak sharp',
-    emoji: '🔤',
-    type: 'builtin',
-    component: 'Wordle',
-    votes: 128,
-    createdAt: Date.now() - 86400000 * 7,
-    tags: ['word', 'brain', 'daily'],
-    remixable: true,
-    published: true,
-    views: 0,
-    remixCount: 0,
-  },
-  {
-    id: 'connections',
-    title: 'Connections',
-    description: 'Find four hidden groups of related words and test your pattern-matching brain',
-    emoji: '🔗',
-    type: 'builtin',
-    component: 'Connections',
-    votes: 94,
-    createdAt: Date.now() - 86400000 * 6,
-    tags: ['word', 'pattern', 'daily'],
-    remixable: true,
-    published: true,
-    views: 0,
-    remixCount: 0,
-  },
-  {
-    id: 'brainteaser',
-    title: 'Daily Brain Teaser',
-    description: 'Solve a quick riddle, use a hint if you need one, and keep your mind moving',
-    emoji: '🧩',
-    type: 'builtin',
-    component: 'BrainTeaser',
-    votes: 77,
-    createdAt: Date.now() - 86400000 * 5,
-    tags: ['riddle', 'logic', 'brain'],
-    remixable: true,
-    published: true,
-    views: 0,
-    remixCount: 0,
-  },
-  {
-    id: 'memory',
-    title: 'Memory Sprint',
-    description: 'Match the pairs fast, minimize moves, and chase a better memory run',
-    emoji: '🎴',
-    type: 'builtin',
-    component: 'MemoryGame',
-    votes: 61,
-    createdAt: Date.now() - 86400000 * 4,
-    tags: ['memory', 'speed', 'brain'],
-    remixable: true,
-    published: true,
-    views: 0,
-    remixCount: 0,
-  },
-  {
-    id: 'facts',
-    title: 'Curiosity Cards',
-    description: 'Flip through surprising facts and feed the brainy side of your next break',
-    emoji: '💡',
-    type: 'builtin',
-    component: 'FactGenerator',
-    votes: 45,
-    createdAt: Date.now() - 86400000 * 3,
-    tags: ['trivia', 'curiosity', 'brain'],
-    remixable: true,
-    published: true,
-    views: 0,
-    remixCount: 0,
-  },
-  ...TEMPLATES.filter((t) => t.id !== 'blank').map((t, index) => ({
+  ...TEMPLATES.filter((t) => t.id !== 'blank').map((t) => ({
     id: t.id,
     title: t.title,
     description: t.description,
     emoji: t.emoji,
     type: 'builtin' as const,
     html: t.html,
-    votes: 50 - index,
+    votes: 0,
     createdAt: Date.now() - 86400000 * 2,
     tags: ['template', 'brain'],
     remixable: true,
@@ -211,7 +137,8 @@ export async function getWidgets(): Promise<Widget[]> {
   try {
     const rows = await prisma.widget.findMany({
       where: { published: true },
-      orderBy: { votes: 'desc' },
+      take: 120,
+      orderBy: { createdAt: 'desc' },
       include: {
         parent: { select: { id: true, title: true, emoji: true, author: true } },
         _count: { select: { remixes: true } },

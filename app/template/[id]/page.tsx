@@ -1,23 +1,25 @@
 'use client';
 
-import { use, useState, useEffect, useRef } from 'react';
+import { use, useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useAuth } from '@clerk/nextjs';
+import { useAuth, useClerk } from '@clerk/nextjs';
 import { getTemplate } from '../../lib/templates';
+import { createOrbitPopHtml, getOrbitTwist } from '../../lib/orbitPop';
 import { getClientId } from '../../lib/clientId';
-import { trackResultGenerated, trackCTAClick, trackError } from '../../lib/analytics';
+import { trackResultGenerated, trackCTAClick, trackError, trackEvent } from '../../lib/analytics';
 
 const CREATED_KEY = 'inad_created_at';
 const LIMIT_MS = 24 * 60 * 60 * 1000;
 
 function hasUsedCreation() {
   if (typeof window === 'undefined') return false;
-  const ts = localStorage.getItem(CREATED_KEY);
+  let ts: string | null = null;
+  try { ts = localStorage.getItem(CREATED_KEY); } catch { return false; }
   if (!ts) return false;
   return Date.now() - parseInt(ts, 10) < LIMIT_MS;
 }
 function markCreationUsed() {
-  localStorage.setItem(CREATED_KEY, String(Date.now()));
+  try { localStorage.setItem(CREATED_KEY, String(Date.now())); } catch { /* Server enforces limits. */ }
 }
 
 // Wire X-Client-Id into every API call from this page so guests can own drafts.
@@ -34,7 +36,7 @@ async function safeJson<T = any>(res: Response): Promise<T & { error?: string }>
   try {
     return JSON.parse(text) as T & { error?: string };
   } catch {
-    if (res.status === 504) return { error: 'The generation timed out. Anthropic might be slow — try again in a moment.' } as T & { error?: string };
+    if (res.status === 504) return { error: 'The generation timed out. The AI service might be slow — try again in a moment.' } as T & { error?: string };
     if (res.status === 502 || res.status === 503) return { error: 'The server is temporarily unavailable. Try again in a moment.' } as T & { error?: string };
     return { error: `Server returned ${res.status}. Try again.` } as T & { error?: string };
   }
@@ -73,8 +75,15 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
   const { id } = use(params);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isSignedIn } = useAuth();
-  const template = getTemplate(id);
+  const { isSignedIn, isLoaded } = useAuth();
+  const { redirectToSignIn } = useClerk();
+  const twist = getOrbitTwist(searchParams.get('twist'));
+  const template = useMemo(() => {
+    const base = getTemplate(id);
+    return base && id === 'orbit-pop'
+      ? { ...base, title: twist.title, html: createOrbitPopHtml(twist.id) }
+      : base;
+  }, [id, twist]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
 
@@ -88,7 +97,8 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
   const [remixCount, setRemixCount] = useState(0);
 
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(() => searchParams.get('idea')?.slice(0, 500) ?? '');
+  const [mobilePanel, setMobilePanel] = useState<'play' | 'build'>('build');
   const [chatStatus, setChatStatus] = useState<ChatStatus>('idle');
   // Step-by-step orchestration state — null when no plan is being executed.
   const [executingPlanId, setExecutingPlanId] = useState<string | null>(null);
@@ -124,12 +134,18 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
   const [howToPlay, setHowToPlay] = useState('');
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState('');
-  const [showPublish, setShowPublish] = useState(false);
+  const publishingRef = useRef(false);
+  const [publishing, setPublishing] = useState(false);
+  const [showPublish, setShowPublish] = useState(searchParams.get('publish') === '1');
   const [allowRemixes, setAllowRemixes] = useState(true);
 
   // Fetch source (widget) if not a builtin template
   useEffect(() => {
-    if (template) { setSourceLoading(false); return; }
+    if (template) {
+      setSource({ title: template.title, emoji: template.emoji, html: template.html, remixHint: template.remixHint, id: template.id });
+      setSourceLoading(false);
+      return;
+    }
     fetch(`/api/widgets/${id}`)
       .then((r) => r.ok ? r.json() : null)
       .then((widget) => {
@@ -160,13 +176,13 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
   // Edit mode auto-resumes any existing draft for this widget so re-entering
   // edit doesn't keep creating fresh dupe drafts.
   useEffect(() => {
-    if (!source) return;
+    if (!source || !isLoaded) return;
     const explicitDraftId = searchParams.get('draft');
 
     async function loadDraft(draftId: string) {
       const dr = await fetch(`/api/drafts/${draftId}`, { headers: ownerHeaders() });
       if (!dr.ok) {
-        if (template) setCurrentHtml(source!.html);
+        setChatError('Couldn’t restore your saved game. Refresh to try again.');
         return;
       }
       const draft = await dr.json();
@@ -185,6 +201,10 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
     }
 
     (async () => {
+      if (isSignedIn) {
+        const clientId = getClientId();
+        if (clientId) await fetch('/api/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId }) });
+      }
       if (explicitDraftId) {
         await loadDraft(explicitDraftId);
       } else if (isEditMode) {
@@ -206,7 +226,7 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
       }
       setBlockedByLimit(!isSignedIn && hasUsedCreation());
     })();
-  }, [source, isSignedIn]);
+  }, [source, isSignedIn, isLoaded]);
 
   // Auto-scroll the thread to bottom when new messages arrive
   useEffect(() => {
@@ -268,28 +288,42 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
     );
   }
 
+  function pinDraftUrl() {
+    if (!draftIdRef.current) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set('draft', draftIdRef.current);
+    url.searchParams.delete('idea');
+    window.history.replaceState({}, '', url);
+  }
+
   async function saveDraft(html: string, title: string, description: string) {
     setDraftStatus('saving');
     try {
       if (draftIdRef.current) {
-        await fetch(`/api/drafts/${draftIdRef.current}`, {
+        const response = await fetch(`/api/drafts/${draftIdRef.current}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', ...ownerHeaders() },
           body: JSON.stringify({ html, title, description }),
         });
+        if (!response.ok) throw new Error('Draft save failed');
       } else {
         const dr = await fetch('/api/drafts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...ownerHeaders() },
           body: JSON.stringify({ html, title, description, emoji: source!.emoji, templateId: id }),
         });
+        if (!dr.ok) throw new Error('Draft save failed');
         const saved = await dr.json();
         draftIdRef.current = saved.id;
       }
+      pinDraftUrl();
       setDraftStatus('saved');
       setTimeout(() => setDraftStatus('idle'), 2500);
+      return true;
     } catch {
       setDraftStatus('idle');
+      setChatError('Your game is playable, but saving failed. Please try again before leaving.');
+      return false;
     }
   }
 
@@ -337,7 +371,7 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
       const res = await fetch('/api/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: instruction, baseHtml: currentHtml }),
+        body: JSON.stringify({ prompt: instruction, baseHtml: id === 'blank' && remixCount === 0 ? undefined : currentHtml }),
         signal: abortRef.current.signal,
       });
       const data = await safeJson<{ html?: string; title?: string; description?: string }>(res);
@@ -551,7 +585,7 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || 'Chat failed');
 
-      if (data.draftId && !draftIdRef.current) draftIdRef.current = data.draftId;
+      if (data.draftId && !draftIdRef.current) { draftIdRef.current = data.draftId; pinDraftUrl(); }
 
       const assistantMessage: Message = data.message;
       setMessages((m) => {
@@ -642,7 +676,9 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
   }
 
   async function handlePublish() {
-    if (!gameTitle.trim()) return;
+    if (!gameTitle.trim() || publishingRef.current) return;
+    publishingRef.current = true; setPublishing(true);
+    try {
     trackCTAClick({ cta_text: isEditMode ? 'Save Edit' : 'Publish', cta_location: 'template_page', cta_destination: isEditMode ? 'edit_save' : 'publish' });
     setEmailError('');
 
@@ -694,6 +730,7 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
           fetch(`/api/drafts/${draftIdRef.current}`, { method: 'DELETE', headers: ownerHeaders() }).catch(() => {});
           draftIdRef.current = null;
         }
+        trackEvent('game_published', { game_id: data.id, remixed_from: parentId });
         router.push(`/play/${data.id}?new=1`);
       } catch (err) {
         setEmailError(err instanceof Error ? err.message : 'Failed to publish');
@@ -701,38 +738,19 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
       return;
     }
 
-    if (!email.trim()) return;
-    try {
-      const parentId = source?.id && source.id !== 'blank' ? source.id : undefined;
-      const res = await fetch('/api/auth/request', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email.trim(),
-          gameData: {
-            title: gameTitle.trim(),
-            description: howToPlay.trim() || `Remix of ${source!.title}`,
-            emoji: source!.emoji,
-            html: currentHtml,
-            author: email.split('@')[0],
-            remixable: allowRemixes,
-            parentId,
-          },
-        }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
-      setPublishStep('sent');
-      setShowPublish(false);
-    } catch (err) {
-      setEmailError(err instanceof Error ? err.message : 'Failed to send email');
-    }
+    if (!await saveDraft(currentHtml, gameTitle.trim(), howToPlay.trim())) return;
+    const returnUrl = new URL(window.location.href);
+    returnUrl.searchParams.set('publish', '1');
+    await redirectToSignIn({ redirectUrl: returnUrl.toString() });
+    } catch { setEmailError('Couldn’t open sign-in. Your draft is saved; please try again.'); }
+    finally { publishingRef.current = false; setPublishing(false); }
   }
 
   const isBusy = chatStatus !== 'idle';
   const hasRemixed = remixCount > 0;
 
   return (
-    <div className="h-screen flex flex-col bg-[#0a0612] text-white overflow-hidden">
+    <div data-panel={mobilePanel} className="game-builder h-dvh flex flex-col bg-[#0a0612] text-white overflow-hidden">
       {/* Header */}
       <header className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-purple-500/25 bg-[#150f24]">
         <button onClick={() => router.back()} className="text-sm text-purple-300/60 hover:text-purple-100 transition-colors">
@@ -754,11 +772,12 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
         <div className="w-16" />
       </header>
 
+      <div className="builder-mobile-tabs" aria-label="Editor view"><button aria-pressed={mobilePanel === 'build'} onClick={() => setMobilePanel('build')}>✧ Build {isBusy ? '· working…' : ''}</button><button aria-pressed={mobilePanel === 'play'} onClick={() => setMobilePanel('play')}>▷ Play your game</button></div>
       {/* Body — stacks vertically on mobile (game on top, chat below),
           side-by-side from md up so phones can actually use the builder. */}
       <div className="flex-1 min-h-0 flex flex-col md:flex-row">
         {/* Game iframe */}
-        <div className="relative min-h-0 h-[42vh] md:h-auto md:flex-1">
+        <div className="builder-preview relative min-h-0 h-[42vh] md:h-auto md:flex-1">
           {chatStatus === 'generating' && (
             <GeneratingBanner
               version={remixCount + 1}
@@ -776,7 +795,7 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
         </div>
 
         {/* Sidebar — Chat thread */}
-        <div className="flex flex-col min-h-0 w-full flex-1 md:w-96 md:flex-none border-t md:border-t-0 md:border-l border-purple-500/25 bg-[#150f24]">
+        <div className="builder-chat flex flex-col min-h-0 w-full flex-1 md:w-96 md:flex-none border-t md:border-t-0 md:border-l border-purple-500/25 bg-[#150f24]">
           {/* Thread header */}
           <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-purple-500/25">
             <div className="flex items-center gap-2">
@@ -891,7 +910,7 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
                 <p className="font-semibold text-purple-200 text-sm mb-1">Sign in to remix games</p>
                 <p className="text-xs text-purple-400 mb-3">It's free — no password needed.</p>
                 <button
-                  onClick={() => router.push('/sign-in')}
+                  onClick={() => redirectToSignIn({ redirectUrl: window.location.href })}
                   className="text-xs font-bold bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-2 rounded-lg"
                 >
                   Sign In / Create Account →
@@ -953,7 +972,7 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
               and extra padding so the publish CTA can't be accidentally hit
               when finishing a chat message. */}
           {hasRemixed && publishStep !== 'sent' && (
-            <div className="shrink-0 border-t-4 border-purple-500/25 bg-[#150f24]/60 px-3 pt-4 pb-3 flex flex-col gap-2">
+            <div className="builder-publish shrink-0 border-t-4 border-purple-500/25 bg-[#150f24]/60 px-3 pt-4 pb-3 flex flex-col gap-2">
               {history.length > 0 && (
                 <button
                   onClick={handleUndo}
@@ -980,7 +999,7 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
                   allowRemixes={allowRemixes} setAllowRemixes={setAllowRemixes}
                   isSignedIn={!!isSignedIn}
                   isEditMode={isEditMode}
-                  onPublish={handlePublish}
+                  publishing={publishing} onPublish={handlePublish}
                   onCancel={() => setShowPublish(false)}
                   onUnpublish={isEditMode && isSignedIn ? handleUnpublish : undefined}
                 />
@@ -1248,7 +1267,7 @@ function PublishForm(props: {
   allowRemixes: boolean; setAllowRemixes: (v: boolean) => void;
   isSignedIn: boolean;
   isEditMode?: boolean;
-  onPublish: () => void; onCancel: () => void;
+  publishing: boolean; onPublish: () => void; onCancel: () => void;
   onUnpublish?: () => void;
 }) {
   return (
@@ -1278,24 +1297,14 @@ function PublishForm(props: {
           <span className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${props.allowRemixes ? 'translate-x-6' : 'translate-x-1'}`} />
         </button>
       </div>
-      {!props.isSignedIn && (
-        <input
-          type="email"
-          className="w-full rounded-xl border border-purple-500/25 bg-[#1a1330] text-white p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-          placeholder="your@email.com"
-          value={props.email}
-          onChange={(e) => props.setEmail(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && props.onPublish()}
-          autoFocus
-        />
-      )}
+      {!props.isSignedIn && <p className="text-sm text-purple-200/70">Your draft is saved before sign-in. Come right back here to publish and own your game.</p>}
       {props.emailError && <p className="text-red-400 text-xs">{props.emailError}</p>}
       <button
         onClick={props.onPublish}
-        disabled={!props.gameTitle.trim() || (!props.isSignedIn && !props.email.trim())}
+        disabled={props.publishing || !props.gameTitle.trim()}
         className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-40 text-white font-bold py-2.5 rounded-xl transition-all text-sm"
       >
-        {props.isEditMode ? '💾 Save Changes' : props.isSignedIn ? '🚀 Publish Now' : 'Send Magic Link →'}
+        {props.publishing ? 'Saving…' : props.isEditMode ? '💾 Save Changes' : props.isSignedIn ? '🚀 Publish Now' : 'Save & sign in to publish →'}
       </button>
       <button onClick={props.onCancel} className="text-xs text-purple-300/30 hover:text-purple-300/50 text-center">
         ← {props.isEditMode ? 'Keep editing' : 'Keep remixing'}

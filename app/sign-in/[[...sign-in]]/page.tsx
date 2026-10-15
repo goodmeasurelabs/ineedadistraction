@@ -7,7 +7,7 @@ export default function SignInPage() {
         <h1 className="font-pixel text-sm sm:text-base neon-text">
           I Need a Distraction
         </h1>
-        <p className="font-arcade text-lg text-purple-300/60 mt-2 tracking-wide">Sign in to create unlimited games</p>
+        <p className="font-arcade text-lg text-purple-300/60 mt-2 tracking-wide">Sign in to save, publish, and remix games</p>
       </div>
       <div className="relative">
         <SignIn
