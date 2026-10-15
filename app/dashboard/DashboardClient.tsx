@@ -7,6 +7,7 @@ import type { Widget } from "@/app/lib/store";
 import type { Draft } from "@/app/lib/drafts";
 import WidgetCard from "@/app/components/WidgetCard";
 import CreateModal from "@/app/components/CreateModal";
+import MagicArcade from "@/app/components/MagicArcade";
 import { trackCTAClick, trackContentEngagement } from "@/app/lib/analytics";
 
 type Sort = "trending" | "new" | "mine";
@@ -26,7 +27,7 @@ function WelcomeBanner({ onDismiss }: { onDismiss: () => void }) {
       <div className="flex items-center gap-3">
         <span className="text-2xl">🎉</span>
         <p className="font-semibold">
-          You're signed in! Create unlimited games and manage your creations.
+          You're signed in! Your games and drafts are ready when you are.
         </p>
       </div>
       <button
@@ -39,18 +40,19 @@ function WelcomeBanner({ onDismiss }: { onDismiss: () => void }) {
   );
 }
 
-function HomeContent() {
+function HomeContent({ initialWidgets }: { initialWidgets: Widget[] }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isSignedIn } = useAuth();
-  const [widgets, setWidgets] = useState<Widget[]>([]);
+  const [widgets, setWidgets] = useState<Widget[]>(initialWidgets);
   const [sort, setSort] = useState<Sort>(() => {
     const tab = searchParams.get("tab");
     if (tab === "new" || tab === "mine") return tab;
     return "trending";
   });
   const [showCreate, setShowCreate] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [myWidgets, setMyWidgets] = useState<Widget[]>([]);
   const [myLoading, setMyLoading] = useState(false);
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -59,26 +61,6 @@ function HomeContent() {
   const [showWelcome, setShowWelcome] = useState(
     searchParams.get("welcome") === "1"
   );
-
-  useEffect(() => {
-    fetch("/api/widgets")
-      .then((r) => safeJson<Widget[]>(r))
-      .then((data) => {
-        if (Array.isArray(data)) {
-          setWidgets(data);
-        } else {
-          const error = typeof data === 'object' && data && 'error' in data ? data.error : 'Unknown error';
-          console.error("[dashboard] failed to load widgets", error);
-          setWidgets([]);
-        }
-        setLoading(false);
-      })
-      .catch((error) => {
-        console.error("[dashboard] widget fetch failed", error);
-        setWidgets([]);
-        setLoading(false);
-      });
-  }, []);
 
   useEffect(() => {
     if (sort === "mine" && isSignedIn) {
@@ -159,96 +141,51 @@ function HomeContent() {
   }
 
   const sorted = [...widgets].sort((a, b) =>
-    sort === "trending" ? b.votes - a.votes : b.createdAt - a.createdAt
+    sort === "trending" ? b.views - a.views || b.createdAt - a.createdAt : b.createdAt - a.createdAt
   );
 
   return (
-    <div className="min-h-screen bg-[#0a0612] crt-scanlines">
-      {/* Header */}
-      <header className="sticky top-0 z-40 relative bg-[#0a0612]/90 backdrop-blur-md border-b border-purple-500/25">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-          <div>
-            <h1 className="font-pixel text-[11px] sm:text-sm neon-text leading-tight tracking-wide">
-              I Need a Distraction
-            </h1>
-            <p className="font-arcade text-sm text-purple-300/60 hidden sm:block tracking-wide">
-              Brain games. Community remixes. Instant fun.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {isSignedIn ? (
-              <UserButton />
-            ) : (
-              <SignInButton mode="redirect">
-                <button className="text-sm font-semibold text-purple-200 hover:text-pink-300 px-3 py-2 rounded-xl hover:bg-purple-500/10 transition-all">
-                  Sign In
-                </button>
-              </SignInButton>
-            )}
-
-            <button
-              onClick={() => { trackCTAClick({ cta_text: 'Create a Game', cta_location: 'header' }); setShowCreate(true); }}
-              className="flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold px-4 py-2.5 rounded-xl neon-glow-purple transition-all text-sm"
-            >
-              ✨ Create a Game
-            </button>
+    <div className="distraction-home">
+      <header className="distraction-header">
+        <div className="distraction-nav">
+          <a className="distraction-brand" href="/" aria-label="I Need a Distraction home"><span className="brand-symbol" aria-hidden="true">✳</span><span>i need a<br /><strong>distraction.</strong></span></a>
+          <nav aria-label="Main navigation" className="distraction-nav-links">
+            <a href="#community" onClick={() => handleTabChange('trending')}>The arcade</a>
+            <button onClick={() => handleTabChange('mine')}>My games</button>
+          </nav>
+          <div className="distraction-account">
+            {isSignedIn ? <UserButton /> : <SignInButton mode="redirect"><button className="magic-sign-in">Sign in</button></SignInButton>}
+            <button className="magic-nav-create" onClick={() => { trackCTAClick({ cta_text: 'Make a game', cta_location: 'header' }); setShowCreate(true); }}>Make a game <span aria-hidden="true">↗</span></button>
           </div>
         </div>
       </header>
-
-      <main className="relative max-w-6xl mx-auto px-4 py-8">
-        {showWelcome && (
-          <WelcomeBanner onDismiss={() => setShowWelcome(false)} />
-        )}
-
-        {/* Hero */}
-        <div className="text-center mb-10">
-          <h2 className="font-pixel text-lg sm:text-2xl leading-relaxed neon-text mb-4">
-            Clever games for<br className="sm:hidden" /> your next break ✨
-          </h2>
-          <p className="font-arcade text-xl text-purple-200/70 max-w-xl mx-auto mb-6 tracking-wide">
-            Play remixable brain games, vote for your favorites, or build
-            your own twist in seconds.
-          </p>
-          <div className="flex items-center justify-center gap-3 flex-wrap">
-            <button
-              onClick={() => { trackCTAClick({ cta_text: 'Create a Game', cta_location: 'hero' }); setShowCreate(true); }}
-              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold px-6 py-3 rounded-xl neon-glow-purple transition-all"
-            >
-              ✨ Create a Game
-            </button>
-            {!isSignedIn && (
-              <SignInButton mode="redirect">
-                <button className="bg-[#150f24] hover:bg-purple-950/60 text-purple-100 font-bold px-6 py-3 rounded-xl border border-purple-500/40 hover:border-pink-400/60 transition-all">
-                  Create Free Account
-                </button>
-              </SignInButton>
-            )}
-          </div>
-        </div>
+      <main className="distraction-main">
+        {showWelcome && <WelcomeBanner onDismiss={() => setShowWelcome(false)} />}
+        {sort !== 'mine' && <MagicArcade />}
+        <section className="community-intro" id="community">
+          <div><p className="magic-eyebrow">SMALL GAMES. VERY GOOD DISTRACTIONS.</p><h2>{sort === 'mine' ? 'Your little universe.' : 'Find your next “one more.”'}</h2></div>
+          <p>{sort === 'mine' ? 'Keep a good idea going.' : 'Pick a game. Get curious. Put your own spin on it.'}</p>
+        </section>
 
         {/* Sort tabs */}
-        <div className="flex items-center gap-2 mb-6">
+        <div className="discovery-tabs">
           {(
             [
-              ["trending", "🔥 Trending"],
-              ["new", "🆕 New"],
-              ["mine", "👤 My Games"]
+              ["trending", "Discover"],
+              ["new", "Fresh finds"],
+              ["mine", "My games"]
             ] as [Sort, string][]
           ).map(([s, label]) => (
             <button
               key={s}
               onClick={() => handleTabChange(s)}
-              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all border ${
-                sort === s
-                  ? "bg-purple-600 text-white border-purple-400 neon-glow-purple"
-                  : "bg-[#150f24] text-purple-200/70 border-purple-500/20 hover:border-purple-400/50 hover:text-purple-100"
-              }`}
+              aria-pressed={sort === s}
+              className={sort === s ? 'discovery-tab selected' : 'discovery-tab'}
             >
               {label}
             </button>
           ))}
-          <span className="font-arcade text-lg text-cyan-300/70 ml-auto tracking-wide">
+          <span className="discovery-count">
             {sort === "mine"
               ? `${myWidgets.length} games`
               : `${widgets.length} games`}
@@ -471,8 +408,12 @@ function HomeContent() {
               />
             ))}
           </div>
+        ) : loadError ? (
+          <div className="arcade-empty" role="status"><p>The community arcade couldn’t load just now.</p><p>You can still play Orbit Pop above, or refresh to try again.</p><button className="magic-nav-create" onClick={() => window.location.reload()}>Try again ↻</button></div>
+        ) : sorted.length === 0 ? (
+          <div className="arcade-empty"><h3>A little room for something new.</h3><p>Play the featured game above, or make the first community distraction.</p><button className="magic-primary" onClick={() => setShowCreate(true)}>Make a game ↗</button></div>
         ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {sorted.map((widget) => (
               <WidgetCard
                 key={widget.id}
@@ -483,42 +424,14 @@ function HomeContent() {
           </div>
         )}
 
-        {/* Bottom CTA */}
-        {!loading && (
-          <div className="mt-16 rounded-3xl bg-gradient-to-br from-purple-700 to-pink-700 p-10 text-center text-white neon-glow-pink border border-pink-400/30">
-            <p className="text-4xl mb-3">🎮</p>
-            <h3 className="font-pixel text-base sm:text-lg mb-3">
-              Build your own game. Free.
-            </h3>
-            <p className="text-purple-100 mb-6 max-w-md mx-auto">
-              Describe any game, AI builds it in seconds. Share it, get votes,
-              see it climb the charts.
-            </p>
-            <div className="flex items-center justify-center gap-3 flex-wrap">
-              <button
-                onClick={() => { trackCTAClick({ cta_text: 'Create a Game', cta_location: 'bottom_cta' }); setShowCreate(true); }}
-                className="bg-white text-purple-700 hover:bg-purple-50 font-bold px-7 py-3 rounded-xl shadow-md transition-all"
-              >
-                ✨ Create a Game
-              </button>
-              {!isSignedIn && (
-                <SignInButton mode="redirect">
-                  <button className="bg-white/20 hover:bg-white/30 text-white font-bold px-7 py-3 rounded-xl transition-all border border-white/30">
-                    Create Free Account
-                  </button>
-                </SignInButton>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Footer */}
-        <footer className="mt-16 border-t border-purple-500/15 pt-6 pb-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-purple-300/40">
-          <span>© {new Date().getFullYear()} I Need a Distraction</span>
-          <span className="hidden sm:inline">·</span>
-          <a href="/privacy" className="hover:text-purple-200 transition-colors">Privacy</a>
-          <span className="hidden sm:inline">·</span>
-          <a href="/terms" className="hover:text-purple-200 transition-colors">Terms</a>
+        <section className="arcade-outro">
+          <span aria-hidden="true">✧</span>
+          <h3>A good break can turn into a great idea.</h3>
+          <button onClick={() => setShowCreate(true)}>Start with a game. Make it yours. ↗</button>
+        </section>
+        <footer className="distraction-footer">
+          <span>A little corner of the internet for playing.</span>
+          <div><span>© {new Date().getFullYear()} I Need a Distraction</span><a href="/make-a-game">AI game maker</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div>
         </footer>
       </main>
 
@@ -527,10 +440,10 @@ function HomeContent() {
   );
 }
 
-export default function DashboardClient() {
+export default function DashboardClient({ initialWidgets }: { initialWidgets: Widget[] }) {
   return (
     <Suspense>
-      <HomeContent />
+      <HomeContent initialWidgets={initialWidgets} />
     </Suspense>
   );
 }

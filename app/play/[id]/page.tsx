@@ -1,8 +1,9 @@
+import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { getWidget } from '@/app/lib/store';
 import PlayClient from './PlayClient';
 
-const SITE_URL = 'https://ineedadistraction.com';
+const SITE_URL = 'https://www.ineedadistraction.com';
 
 type RouteParams = { id: string };
 type RouteSearchParams = { from?: string };
@@ -34,7 +35,7 @@ export async function generateMetadata({
   // no auth check — the author's act of sharing tags the link itself.
   const isAuthorShare = from === 'author';
   const description = isAuthorShare
-    ? `Check out this game I made! ${widget.title} — built with AI in seconds. Play it free.`
+    ? `Check out this game I made! ${widget.title} — made with AI. Play it free.`
     : widget.description?.trim()
       ? `${widget.description} · Play free, no signup.`
       : `Play ${widget.title} — a community-made AI mini-game. Free, no signup.`;
@@ -66,5 +67,8 @@ export default async function PlayPage({
   params: Promise<RouteParams>;
 }) {
   const { id } = await params;
-  return <PlayClient id={id} />;
+  const widget = await getWidget(id);
+  if (!widget) notFound();
+  const structured = { '@context': 'https://schema.org', '@type': 'VideoGame', name: widget.title, description: widget.description, url: `${SITE_URL}/play/${id}`, gamePlatform: 'Web browser', applicationCategory: 'Game', isAccessibleForFree: true };
+  return <><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structured).replace(/</g, '\\u003c') }} /><PlayClient id={id} initialWidget={widget} /></>;
 }

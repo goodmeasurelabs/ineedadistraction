@@ -1,3 +1,5 @@
+import { createOrbitPopHtml } from './orbitPop';
+
 export type Template = {
   id: string;
   title: string;
@@ -426,10 +428,10 @@ const BLANK: Template = {
   title: 'From Scratch',
   emoji: '✨',
   description: 'Describe a clever little game and AI builds it',
-  remixHint: 'Describe the brainy mini-game you want to make...',
-  html: `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Blank</title>
-<style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0f0f1a;color:#a78bfa;font-family:system-ui,sans-serif;font-size:18px;text-align:center;padding:24px}</style>
-</head><body><p>Describe your brainy game idea in the sidebar and hit Generate ✨</p></body></html>`,
+  remixHint: 'Describe a small game you would love to play. Send your idea and we’ll build from there.',
+  html: `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Your next little world</title>
+<style>*{box-sizing:border-box}body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:radial-gradient(ellipse at bottom,#283c2f,#111715 70%);color:#e8eedc;font-family:system-ui,sans-serif;text-align:center;padding:24px}span{color:#dcf998;font-size:54px}h1{font-size:clamp(24px,5vw,38px);letter-spacing:-1px;margin:12px 0}p{font-size:14px;line-height:1.8;color:#b5c6a8;max-width:320px;margin:auto}</style>
+</head><body><main><span aria-hidden="true">✳</span><h1>Every game starts<br>with a little “what if.”</h1><p>Your game will appear here. Describe an idea in the chat and send it to get started.</p></main></body></html>`,
 };
 
 const MATH_RACER: Template = {
@@ -856,7 +858,14 @@ document.getElementById('againBtn').onclick=start;
 </html>`,
 };
 
-export const TEMPLATES: Template[] = [MATH_RACER, MEMORY_SEQUENCE, ODD_ONE_OUT, MATH_QUIZ, TRIVIA, BLANK];
+const ORBIT_POP: Template = {
+  id: 'orbit-pop', title: 'Orbit Pop', emoji: '✦',
+  description: 'Catch glowing stars, dodge decoys, and chase one more combo.',
+  remixHint: 'Try turning the stars into fireflies, adding a rare golden star, or making a whole new tiny universe.',
+  html: createOrbitPopHtml(),
+};
+
+export const TEMPLATES: Template[] = [ORBIT_POP, MATH_RACER, MEMORY_SEQUENCE, ODD_ONE_OUT, MATH_QUIZ, TRIVIA, BLANK];
 export function getTemplate(id: string) {
   return TEMPLATES.find((t) => t.id === id) ?? null;
 }

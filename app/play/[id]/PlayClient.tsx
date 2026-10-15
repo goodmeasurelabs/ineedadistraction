@@ -1,5 +1,6 @@
 'use client';
 
+import { trackShareClick, trackEvent } from '../../lib/analytics';
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth, useUser } from '@clerk/nextjs';
@@ -23,10 +24,8 @@ function NewGameBanner() {
 
   if (!visible) return null;
 
-  function handleCopy() {
-    navigator.clipboard.writeText(window.location.href.split('?')[0]);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  async function handleCopy() {
+    try { await navigator.clipboard.writeText(window.location.href.split('?')[0] + '?from=author&utm_source=share&utm_medium=creator'); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* Page address is also shareable. */ }
   }
 
   return (
@@ -54,18 +53,20 @@ function formatCount(n: number, singular: string, plural: string) {
   return `${n.toLocaleString()} ${n === 1 ? singular : plural}`;
 }
 
-function PlayPageInner({ id }: { id: string }) {
+function PlayPageInner({ id, initialWidget }: { id: string; initialWidget: Widget }) {
   const router = useRouter();
   const params = useSearchParams();
   const isNew = params.get('new') === '1';
   const { isSignedIn } = useAuth();
   const { user } = useUser();
 
-  const [widget, setWidget] = useState<Widget | null>(null);
+  const [widget, setWidget] = useState<Widget | null>(initialWidget);
   const [notFound, setNotFound] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showHowTo, setShowHowTo] = useState(false);
-  const [votes, setVotes] = useState(0);
+  const [votes, setVotes] = useState(initialWidget.votes);
+  const [actionError, setActionError] = useState('');
+  const [voting, setVoting] = useState(false);
   const [voted, setVoted] = useState(false);
   const [reportState, setReportState] = useState<'idle' | 'open' | 'sending' | 'sent'>('idle');
 
@@ -73,58 +74,45 @@ function PlayPageInner({ id }: { id: string }) {
     if (!widget) return;
     setReportState('sending');
     try {
-      await fetch(`/api/widgets/${widget.id}/report`, {
+      const response = await fetch(`/api/widgets/${widget.id}/report`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason }),
       });
-    } catch { /* best-effort; still thank the user */ }
-    setReportState('sent');
+      if (!response.ok) throw new Error();
+      setReportState('sent');
+    } catch { setReportState('idle'); setActionError('Report could not be sent. Please try again.'); }
   }
 
   useEffect(() => {
-    fetch(`/api/widgets/${id}`)
-      .then((r) => {
-        if (!r.ok) { setNotFound(true); return null; }
-        return r.json();
-      })
-      .then((data) => {
-        if (data) {
-          setWidget(data);
-          setVotes(data.votes);
-          const stored: string[] = JSON.parse(localStorage.getItem('voted_widgets') ?? '[]');
-          setVoted(stored.includes(data.id));
-
-          const viewKey = `inad_viewed_${data.id}_${new Date().toISOString().slice(0, 10)}`;
-          if (!localStorage.getItem(viewKey)) {
-            fetch(`/api/widgets/${data.id}/view`, { method: 'POST' })
-              .then((r) => (r.ok ? r.json() : null))
-              .then((viewData) => {
-                if (viewData?.views) {
-                  setWidget((current) => current ? { ...current, views: viewData.views } : current);
-                  localStorage.setItem(viewKey, '1');
-                }
-              })
-              .catch(() => {});
-          }
-        }
-      });
+    try { setVoted(JSON.parse(localStorage.getItem('voted_widgets') ?? '[]').includes(id)); } catch { /* Optional local preference. */ }
+    const viewKey = `inad_viewed_${id}_${new Date().toISOString().slice(0, 10)}`;
+    let seen = false;
+    try { seen = !!localStorage.getItem(viewKey); } catch { /* Track without storage. */ }
+    if (!seen) fetch(`/api/widgets/${id}/view`, { method: 'POST' }).then(async r => {
+      if (!r.ok) return;
+      const data = await r.json();
+      setWidget(w => w ? { ...w, views: data.views ?? w.views } : w);
+      try { localStorage.setItem(viewKey, '1'); } catch { /* Optional. */ }
+    }).catch(() => {});
+    trackEvent('game_open', { game_id: id, source: params.get('utm_source') ?? 'direct' });
   }, [id]);
 
   async function handleVote() {
-    if (!widget) return;
-    const stored: string[] = JSON.parse(localStorage.getItem('voted_widgets') ?? '[]');
-    if (voted) {
-      setVoted(false);
-      setVotes((v) => Math.max(0, v - 1));
-      localStorage.setItem('voted_widgets', JSON.stringify(stored.filter((i) => i !== widget.id)));
-      await fetch(`/api/widgets/${widget.id}/vote`, { method: 'DELETE' });
-    } else {
-      setVoted(true);
-      setVotes((v) => v + 1);
-      localStorage.setItem('voted_widgets', JSON.stringify([...stored, widget.id]));
-      await fetch(`/api/widgets/${widget.id}/vote`, { method: 'POST' });
-    }
+    if (!widget || voting) return;
+    setVoting(true); setActionError('');
+    try {
+      const response = await fetch(`/api/widgets/${id}/vote`, { method: voted ? 'DELETE' : 'POST' });
+      if (!response.ok) throw new Error();
+      setVotes(v => Math.max(0, v + (voted ? -1 : 1)));
+      setVoted(!voted);
+      try {
+        const raw = JSON.parse(localStorage.getItem('voted_widgets') ?? '[]');
+        const stored: string[] = Array.isArray(raw) ? raw : [];
+        localStorage.setItem('voted_widgets', JSON.stringify(voted ? stored.filter(v => v !== id) : [...new Set([...stored, id])]));
+      } catch { /* Optional. */ }
+    } catch { setActionError('Couldn’t save your like. Try again.'); }
+    finally { setVoting(false); }
   }
 
   // Author of this widget? Computed early (with optional chaining on `widget`)
@@ -133,13 +121,18 @@ function PlayPageInner({ id }: { id: string }) {
   // game — drives the "Check out this game I made!" preview in iMessage etc.
   const isAuthor = !!(isSignedIn && user && widget?.userId && widget.userId === user.id);
 
-  function handleShare() {
-    if (typeof window === 'undefined') return;
-    const base = window.location.href.split('?')[0];
-    const url = isAuthor ? `${base}?from=author` : base;
-    navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  async function handleShare() {
+    const url = new URL(`/play/${id}`, window.location.origin);
+    if (isAuthor) url.searchParams.set('from', 'author');
+    url.searchParams.set('utm_source', 'share'); url.searchParams.set('utm_medium', 'friend');
+    const native = typeof navigator.share === 'function';
+    try {
+      if (native) await navigator.share({ title: widget?.title, text: isAuthor ? 'I made this little game. Try it!' : 'Found your next tiny distraction.', url: url.toString() });
+      else await navigator.clipboard.writeText(url.toString());
+      setCopied(true);
+      trackShareClick({ method: native ? 'native' : 'clipboard', content_type: 'game', content_id: id });
+      setTimeout(() => setCopied(false), 2500);
+    } catch (error) { if (!(error instanceof Error && error.name === 'AbortError')) setActionError('Couldn’t share. Copy this page’s address instead.'); }
   }
 
   if (notFound) {
@@ -169,7 +162,7 @@ function PlayPageInner({ id }: { id: string }) {
   const remixHref = `/template/${widget.id}`;
 
   return (
-    <div className="h-screen flex flex-col bg-[#0a0612] text-white overflow-hidden">
+    <div className="play-shell h-dvh flex flex-col bg-[#0a0612] text-white overflow-hidden">
       {/* New game banner */}
       {isNew && <NewGameBanner />}
 
@@ -205,7 +198,7 @@ function PlayPageInner({ id }: { id: string }) {
         <div className="flex items-center gap-1">
           <button
             onClick={handleVote}
-            title={voted ? 'Unlike' : 'Like this game'}
+            disabled={voting} aria-pressed={voted} title={voted ? 'Unlike' : 'Like this game'}
             className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg transition-colors ${
               voted ? 'bg-purple-800/60 text-purple-300' : 'text-purple-300/50 hover:text-purple-100 hover:bg-purple-500/10'
             }`}
@@ -214,10 +207,10 @@ function PlayPageInner({ id }: { id: string }) {
           </button>
           <button
             onClick={handleShare}
-            title="Copy share link"
+            title="Share this game" aria-label="Share this game"
             className="text-xs text-purple-300/50 hover:text-purple-100 px-2.5 py-1.5 rounded-lg hover:bg-purple-500/10 transition-colors"
           >
-            {copied ? 'Copied!' : '🔗'}
+            {copied ? 'Done!' : 'Share ↗'}
           </button>
           {!isAuthor && (
             <button
@@ -249,6 +242,7 @@ function PlayPageInner({ id }: { id: string }) {
         </div>
       </header>
 
+      {actionError && <p role="status" className="px-4 py-2 text-sm text-amber-200">{actionError}</p>}
       {/* How to play — collapsible */}
       {widget.description && (
         <div className="shrink-0 border-b border-purple-500/25">
@@ -344,10 +338,10 @@ function PlayPageInner({ id }: { id: string }) {
   );
 }
 
-export default function PlayClient({ id }: { id: string }) {
+export default function PlayClient({ id, initialWidget }: { id: string; initialWidget: Widget }) {
   return (
     <Suspense>
-      <PlayPageInner id={id} />
+      <PlayPageInner id={id} initialWidget={initialWidget} />
     </Suspense>
   );
 }
