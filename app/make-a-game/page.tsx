@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import RefVisit from '../components/RefVisit';
+import { getWidget } from '../lib/store';
 export const metadata: Metadata = {
   title: 'AI Game Maker — Make a Mini-Game Without Coding',
   description: 'Describe a small game, play what AI builds, and remix it with your own ideas. Start creating for free in your browser. No coding or downloads needed.',
@@ -9,9 +11,18 @@ const ideas = [
   ['🌱', 'A garden that glows', 'Make a cozy garden where taps grow surprising glowing plants. No timer. Touch-friendly, with little discoveries.'],
   ['🪐', 'A tiny space adventure', 'Make a 20-second space dodge game with one-finger controls, a clear score, and a replay button.'],
 ];
-export default function GameMaker() {
+export default async function GameMaker({ searchParams }: { searchParams: Promise<{ ref?: string }> }) {
+  const { ref } = await searchParams;
+  const refId = ref && /^[\w-]{1,40}$/.test(ref) ? ref : null;
+  const source = refId ? await getWidget(refId) : undefined;
+  const sourceCanRemix = !!source && source.type === 'user-created' && !!source.html && source.remixable !== false;
   return <div className="distraction-home"><main className="maker-landing">
-    <a className="magic-text-link" href="/">← Back to the little arcade</a>
+    {refId && <RefVisit refId={refId} known={!!source} />}
+    <a className="magic-text-link" href="/">← Back to the break button</a>
+    {source && source.type === 'user-created' && <aside className="maker-ref" aria-label="The game that sent you here">
+      <p>You came from <strong>{source.emoji} {source.title}</strong>{source.author ? ` by ${source.author}` : ''}, made right here.</p>
+      {sourceCanRemix ? <a className="magic-primary" href={`/template/${source.id}`}>Remix this game ↗</a> : <p>Its creator turned off remixes, so start your own below.</p>}
+    </aside>}
     <p className="magic-eyebrow">YOUR IMAGINATION HAS A PLAY BUTTON</p>
     <h1>That weird little idea?<br /><em>Make it a game.</em></h1>
     <p className="maker-lede">An AI game maker for curious people. Describe something small, get a playable mini-game, and keep making it more you.</p>

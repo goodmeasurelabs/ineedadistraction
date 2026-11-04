@@ -7,7 +7,9 @@ import type { Widget } from "@/app/lib/store";
 import type { Draft } from "@/app/lib/drafts";
 import WidgetCard from "@/app/components/WidgetCard";
 import CreateModal from "@/app/components/CreateModal";
-import MagicArcade from "@/app/components/MagicArcade";
+import BreakButton, { type DailyTeaser } from "@/app/components/BreakButton";
+import MakerSection from "@/app/components/MakerSection";
+import { GameCards, SiteFooter } from "@/app/components/SiteChrome";
 import { trackCTAClick, trackContentEngagement } from "@/app/lib/analytics";
 
 type Sort = "trending" | "new" | "mine";
@@ -40,19 +42,22 @@ function WelcomeBanner({ onDismiss }: { onDismiss: () => void }) {
   );
 }
 
-function HomeContent({ initialWidgets }: { initialWidgets: Widget[] }) {
+function HomeContent({ initialWidgets, daily }: { initialWidgets: Widget[]; daily: DailyTeaser }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isSignedIn } = useAuth();
-  const [widgets, setWidgets] = useState<Widget[]>(initialWidgets);
+  // The front page shows player-made games. The built-in classics (Math Quiz,
+  // Trivia, Random Facts…) keep their /play pages and are listed on /games.
+  const [widgets] = useState<Widget[]>(() => initialWidgets.filter((w) => w.type === 'user-created'));
+  const community = widgets.filter((w) => w.html || w.hasHtml).map((w) => ({ id: w.id, title: w.title, emoji: w.emoji, author: w.author }));
   const [sort, setSort] = useState<Sort>(() => {
     const tab = searchParams.get("tab");
     if (tab === "new" || tab === "mine") return tab;
     return "trending";
   });
   const [showCreate, setShowCreate] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState(false);
+  const loading = false;
+  const loadError = false;
   const [myWidgets, setMyWidgets] = useState<Widget[]>([]);
   const [myLoading, setMyLoading] = useState(false);
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -150,7 +155,9 @@ function HomeContent({ initialWidgets }: { initialWidgets: Widget[] }) {
         <div className="distraction-nav">
           <a className="distraction-brand" href="/" aria-label="I Need a Distraction home"><span className="brand-symbol" aria-hidden="true">✳</span><span>i need a<br /><strong>distraction.</strong></span></a>
           <nav aria-label="Main navigation" className="distraction-nav-links">
-            <a href="#community" onClick={() => handleTabChange('trending')}>The arcade</a>
+            <a href="/daily">Daily</a>
+            <a href="/games">All games</a>
+            <a href="#community" onClick={() => handleTabChange('trending')}>Made by players</a>
             <button onClick={() => handleTabChange('mine')}>My games</button>
           </nav>
           <div className="distraction-account">
@@ -161,10 +168,16 @@ function HomeContent({ initialWidgets }: { initialWidgets: Widget[] }) {
       </header>
       <main className="distraction-main">
         {showWelcome && <WelcomeBanner onDismiss={() => setShowWelcome(false)} />}
-        {sort !== 'mine' && <MagicArcade />}
+        {sort !== 'mine' && <BreakButton community={community} daily={daily} />}
+        {sort !== 'mine' && (
+          <section className="bb-section" aria-labelledby="games-title">
+            <div className="community-intro"><div><p className="magic-eyebrow">ONE NAME, ONE NUMBER</p><h2 id="games-title">The games in the button.</h2></div><p>Each one is under two minutes and ends on a score you can share. <a href="/games">All games ↗</a></p></div>
+            <GameCards />
+          </section>
+        )}
         <section className="community-intro" id="community">
-          <div><p className="magic-eyebrow">SMALL GAMES. VERY GOOD DISTRACTIONS.</p><h2>{sort === 'mine' ? 'Your little universe.' : 'Find your next “one more.”'}</h2></div>
-          <p>{sort === 'mine' ? 'Keep a good idea going.' : 'Pick a game. Get curious. Put your own spin on it.'}</p>
+          <div><p className="magic-eyebrow">MADE WITH THE AI GAME MAKER</p><h2>{sort === 'mine' ? 'Your little universe.' : 'Made by players.'}</h2></div>
+          <p>{sort === 'mine' ? 'Keep a good idea going.' : 'Published player games join the Distract me button.'}</p>
         </section>
 
         {/* Sort tabs */}
@@ -409,9 +422,9 @@ function HomeContent({ initialWidgets }: { initialWidgets: Widget[] }) {
             ))}
           </div>
         ) : loadError ? (
-          <div className="arcade-empty" role="status"><p>The community arcade couldn’t load just now.</p><p>You can still play Orbit Pop above, or refresh to try again.</p><button className="magic-nav-create" onClick={() => window.location.reload()}>Try again ↻</button></div>
+          <div className="arcade-empty" role="status"><p>The player-made games couldn’t load just now.</p><p>The Distract me button above still works, or refresh to try again.</p><button className="magic-nav-create" onClick={() => window.location.reload()}>Try again ↻</button></div>
         ) : sorted.length === 0 ? (
-          <div className="arcade-empty"><h3>A little room for something new.</h3><p>Play the featured game above, or make the first community distraction.</p><button className="magic-primary" onClick={() => setShowCreate(true)}>Make a game ↗</button></div>
+          <div className="arcade-empty"><h3>A little room for something new.</h3><p>Press Distract me above, or make the first player-made game.</p><button className="magic-primary" onClick={() => setShowCreate(true)}>Make a game ↗</button></div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {sorted.map((widget) => (
@@ -424,15 +437,8 @@ function HomeContent({ initialWidgets }: { initialWidgets: Widget[] }) {
           </div>
         )}
 
-        <section className="arcade-outro">
-          <span aria-hidden="true">✧</span>
-          <h3>A good break can turn into a great idea.</h3>
-          <button onClick={() => setShowCreate(true)}>Start with a game. Make it yours. ↗</button>
-        </section>
-        <footer className="distraction-footer">
-          <span>A little corner of the internet for playing.</span>
-          <div><span>© {new Date().getFullYear()} I Need a Distraction</span><a href="/make-a-game">AI game maker</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div>
-        </footer>
+        {sort !== 'mine' && <MakerSection />}
+        <SiteFooter />
       </main>
 
       {showCreate && <CreateModal onClose={() => setShowCreate(false)} />}
@@ -440,10 +446,10 @@ function HomeContent({ initialWidgets }: { initialWidgets: Widget[] }) {
   );
 }
 
-export default function DashboardClient({ initialWidgets }: { initialWidgets: Widget[] }) {
+export default function DashboardClient({ initialWidgets, daily }: { initialWidgets: Widget[]; daily: DailyTeaser }) {
   return (
     <Suspense>
-      <HomeContent initialWidgets={initialWidgets} />
+      <HomeContent initialWidgets={initialWidgets} daily={daily} />
     </Suspense>
   );
 }

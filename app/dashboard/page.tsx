@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { getWidgets } from '../lib/store';
 import { getOrbitTwist } from '../lib/orbitPop';
 import DashboardClient from './DashboardClient';
+import { dailyChallenge, utcDate } from '../lib/daily';
 export const dynamic = 'force-dynamic';
 export async function generateMetadata({ searchParams }: { searchParams: Promise<{ challenge?: string; twist?: string; tab?: string }> }): Promise<Metadata> {
   const params = await searchParams;
@@ -14,4 +15,9 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
   }
   return { alternates: { canonical: '/' } };
 }
-export default async function DashboardPage() { return <DashboardClient initialWidgets={(await getWidgets()).map(({ html, ...game }) => ({ ...game, hasHtml: !!html }))} />; }
+export default async function DashboardPage() {
+  const widgets = (await getWidgets()).map(({ html, ...game }) => ({ ...game, hasHtml: !!html }));
+  const today = dailyChallenge(utcDate());
+  const daily = { date: today.date, number: today.number, title: today.title, emoji: today.game.emoji, roundLabel: today.game.roundLabel };
+  return <DashboardClient initialWidgets={widgets} daily={daily} />;
+}

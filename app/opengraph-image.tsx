@@ -3,7 +3,7 @@ import { ImageResponse } from 'next/og';
 export const runtime = 'nodejs';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
-export const alt = 'I Need a Distraction — tiny games, happy accidents';
+export const alt = 'I Need a Distraction — the break button for tiny games';
 
 // Site-wide default OG image (homepage / dashboard / any page without its own).
 export default function OGImage() {
@@ -45,10 +45,10 @@ export default function OGImage() {
               lineHeight: 1.02, display: 'flex', flexWrap: 'wrap', maxWidth: 1040,
             }}
           >
-            Less scrolling. More oh, wow.
+            Need a distraction?
           </div>
           <div style={{ marginTop: 26, fontSize: 38, color: '#c9d5bd', fontWeight: 500, display: 'flex', maxWidth: 960 }}>
-            Tiny games. Happy accidents. Play instantly, then make it your own.
+            One press. A tiny game, about 2 minutes. Then back to work.
           </div>
         </div>
 
@@ -61,7 +61,7 @@ export default function OGImage() {
               boxShadow: '0 10px 30px -10px rgba(218,246,151,0.15)',
             }}
           >
-            Play a little ↗
+            Distract me
           </div>
           <div style={{ display: 'flex', fontSize: 24, color: '#9ca3af' }}>ineedadistraction.com</div>
         </div>
