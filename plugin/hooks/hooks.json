@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/state.sh\" working prompt claude-code",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/state.sh\" working prompt auto",
             "timeout": 10
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/state.sh\" waiting done claude-code",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/state.sh\" waiting done auto",
             "timeout": 10
           }
         ]
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/state.sh\" waiting permission claude-code",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/state.sh\" waiting permission auto",
             "timeout": 10
           }
         ]
@@ -38,7 +38,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/state.sh\" resume - claude-code",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/state.sh\" resume - auto",
             "timeout": 10
           }
         ]
@@ -49,8 +49,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/state.sh\" idle end claude-code",
-            "timeout": 10
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/state.sh\" idle end auto",
+            "timeout": 3
           }
         ]
       }
@@ -61,7 +61,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/state.sh\" waiting question claude-code",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/state.sh\" waiting question auto",
             "timeout": 10
           }
         ]
@@ -70,7 +70,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/state.sh\" resume - claude-code",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/state.sh\" resume - auto",
             "timeout": 10
           }
         ]
@@ -81,7 +81,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/state.sh\" resume - claude-code",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/state.sh\" resume - auto",
             "timeout": 10
           }
         ]
@@ -92,7 +92,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/state.sh\" waiting done claude-code",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/state.sh\" waiting done auto",
             "timeout": 10
           }
         ]
@@ -104,7 +104,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/state.sh\" waiting done claude-code",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/state.sh\" waiting done auto",
             "timeout": 10
           }
         ]

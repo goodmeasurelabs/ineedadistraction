@@ -25,6 +25,15 @@ INPUT=""
 if [ ! -t 0 ]; then INPUT=$(cat 2>/dev/null); fi
 field() { printf '%s' "$INPUT" | tr -d '\n' | sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -n 1; }
 
+# One hooks file serves both agents, so work out which one is calling.
+if [ "$AGENT" = "auto" ]; then
+  case "$(field transcript_path)" in
+    */.codex/*) AGENT="codex" ;;
+    */.claude/*) AGENT="claude-code" ;;
+    *) if [ -n "$PLUGIN_ROOT" ]; then AGENT="codex"; else AGENT="claude-code"; fi ;;
+  esac
+fi
+
 finish() { [ "$REASON" = "done" ] && printf '{}'; exit 0; }
 
 [ -f "$DIR/off" ] && finish
