@@ -38,8 +38,17 @@ export default function AgentClient() {
 
   useEffect(() => {
     // The plugin opens /agent#t=<token>. The fragment never reaches the server.
-    const match = window.location.hash.match(/^#t=([A-Za-z0-9_-]{20,64})$/);
+    const match = window.location.hash.match(/^#t=([A-Za-z0-9_-]{20,64})(&popup)?$/);
     if (match) {
+      // The plugin opens a chromeless window; browsers ignore its size flags
+      // when already running, so shape it here to sit beside a terminal.
+      if (match[2]) {
+        try {
+          const width = 460, height = Math.min(800, window.screen.availHeight);
+          window.resizeTo(width, height);
+          window.moveTo(window.screen.availWidth - width - 24, Math.max(0, (window.screen.availHeight - height) / 2));
+        } catch { /* a normal tab ignores this */ }
+      }
       try { localStorage.setItem(AGENT_TOKEN_KEY, match[1]); } catch { /* handled below */ }
       window.history.replaceState(null, '', window.location.pathname);
       trackEvent('agent_paired', {});

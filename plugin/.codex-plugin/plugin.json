@@ -1,6 +1,6 @@
 {
   "name": "distraction",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Play a game from ineedadistraction.com while your coding agent works. It pauses the moment the agent finishes or needs you.",
   "homepage": "https://www.ineedadistraction.com/agent",
   "repository": "https://github.com/goodmeasurelabs/ineedadistraction",
