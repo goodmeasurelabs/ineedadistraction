@@ -2,16 +2,21 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { enforceRateLimit } from '@/app/lib/rateLimit';
 import {
-  ATTACHED_WINDOW_MS, cleanAgentLabel, cleanReason, isAgentState, isAgentToken,
+  ATTACHED_WINDOW_MS, RUN_STALE_MS, cleanAgentLabel, cleanReason, cleanRunId, isAgentState, isAgentToken, rollUp,
   type AgentSnapshot, type AgentState,
 } from '@/app/lib/agentSession';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
-type Row = { state: string; reason: string | null; agent: string | null; seq: number; updatedAt: Date; seenAt: Date | null };
+type Row = { state: string; reason: string | null; agent: string | null; seq: number; updatedAt: Date; seenAt: Date | null; working: number; waiting: number; waitedAt: Date | null };
 
 function snapshot(row: Row): AgentSnapshot {
+  // Nothing has reported for a long time: the agents are gone, whatever the
+  // last word was (a crash or a closed laptop never says goodbye).
+  if (row.state !== 'idle' && Date.now() - row.updatedAt.getTime() > RUN_STALE_MS) {
+    row = { ...row, state: 'idle', reason: 'end', working: 0, waiting: 0 };
+  }
   return {
     state: row.state as AgentState,
     reason: cleanReason(row.reason),
@@ -19,6 +24,9 @@ function snapshot(row: Row): AgentSnapshot {
     seq: row.seq,
     updatedAt: row.updatedAt.getTime(),
     attached: !!row.seenAt && Date.now() - row.seenAt.getTime() < ATTACHED_WINDOW_MS,
+    working: row.working,
+    waiting: row.waiting,
+    waitedAt: row.waitedAt?.getTime() ?? 0,
   };
 }
 
@@ -40,10 +48,33 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
 
   const reason = cleanReason(input.reason);
   const agent = cleanAgentLabel(input.agent);
-  const row = await prisma.agentSession.upsert({
-    where: { token },
-    create: { token, state: input.state, reason, agent, seq: 1, updatedAt: new Date() },
-    update: { state: input.state, reason, ...(agent ? { agent } : {}), seq: { increment: 1 }, updatedAt: new Date() },
+  const run = cleanRunId(input.session);
+  const state = input.state;
+  const now = new Date();
+  const row = await prisma.$transaction(async (tx) => {
+    // Touch the roll-up row first: that takes its lock, so two agents reporting
+    // at the same moment are applied one after the other.
+    await tx.agentSession.upsert({
+      where: { token },
+      create: { token, state, reason, agent, seq: 0, updatedAt: now },
+      update: { seq: { increment: 0 } },
+    });
+    if (state === 'idle') await tx.agentRun.deleteMany({ where: { token, run } });
+    else await tx.agentRun.upsert({
+      where: { token_run: { token, run } },
+      create: { token, run, state, reason, agent, updatedAt: now },
+      update: { state, reason, ...(agent ? { agent } : {}), updatedAt: now },
+    });
+    await tx.agentRun.deleteMany({ where: { token, updatedAt: { lt: new Date(now.getTime() - RUN_STALE_MS) } } });
+    const all = rollUp(await tx.agentRun.findMany({ where: { token } }));
+    return tx.agentSession.update({
+      where: { token },
+      data: {
+        state: all.state, reason: all.state === 'idle' ? reason : all.reason, working: all.working, waiting: all.waiting,
+        ...(state === 'waiting' ? { waitedAt: now } : {}),
+        ...(all.agent ?? agent ? { agent: all.agent ?? agent } : {}), seq: { increment: 1 }, updatedAt: now,
+      },
+    });
   });
   return NextResponse.json(snapshot(row), { headers: NO_STORE });
 }
@@ -73,6 +104,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
     await new Promise((resolve) => setTimeout(resolve, 700));
   }
 
-  if (!row) return NextResponse.json({ state: 'unpaired', seq: 0, attached: false }, { headers: NO_STORE });
+  if (!row) return NextResponse.json({ state: 'unpaired', seq: 0, attached: false, working: 0, waiting: 0, waitedAt: 0 }, { headers: NO_STORE });
   return NextResponse.json(snapshot(row), { headers: NO_STORE });
 }

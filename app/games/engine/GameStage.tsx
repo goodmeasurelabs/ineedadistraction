@@ -317,19 +317,24 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
 
   // ---- Agent Mode -----------------------------------------------------------
   const lastAgentState = useRef<string>('unpaired');
+  const lastWaited = useRef(0);
   useEffect(() => {
     const state = live.current;
     const previous = lastAgentState.current;
+    const another = previous === 'waiting' && agent.waitedAt > lastWaited.current;
     lastAgentState.current = agent.state;
+    lastWaited.current = agent.waitedAt;
     if (!agent.paired) return;
-    if (agent.state === 'waiting' && previous === 'working') {
+    // Pause when an agent stops, including a second one stopping while the
+    // first is still waiting and the player chose to keep going.
+    if (agent.state === 'waiting' && (previous === 'working' || another)) {
       // The agent just stopped: pause, unless the run is already over.
       if (!state.over && state.pause !== 'agent') setPause('agent');
       sfxRef.current?.chime();
     } else if (agent.state === 'working' && state.pause === 'agent') {
       setPause(null, true);
     }
-  }, [agent.state, agent.seq, agent.paired, setPause]);
+  }, [agent.state, agent.seq, agent.waitedAt, agent.paired, setPause]);
 
   // Tab title carries the agent's status, so it is visible from another window.
   const needsYou = agent.paired && agent.state === 'waiting';
@@ -373,6 +378,11 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
   const agentLine = agent.reason === 'permission' ? `${agentName} is asking for permission.`
     : agent.reason === 'question' ? `${agentName} has a question for you.`
     : `${agentName} finished its turn.`;
+  // With several agents running, say how many are in each state.
+  const several = agent.working + agent.waiting > 1;
+  const crowd = !several ? '' : agent.state === 'waiting'
+    ? ` ${agent.waiting > 1 ? `${agent.waiting} agents need you` : '1 agent needs you'}${agent.working ? `, ${agent.working} still working` : ''}.`
+    : ` ${agent.working} agents working.`;
   const gap = result && !result.newBest && result.previousBest > result.score ? result.previousBest - result.score : 0;
 
   return (
@@ -400,8 +410,8 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
       {agent.paired && (
         <div className={`agent-bar agent-${agent.state}`} role="status">
           <i aria-hidden="true" />
-          {agent.state === 'working' && <span>{agentName} is working <b>{formatClock(now - agent.since)}</b>. Play on.</span>}
-          {agent.state === 'waiting' && <span>{agentLine} It is waiting on you.</span>}
+          {agent.state === 'working' && <span>{several ? `${agent.working} agents working` : `${agentName} is working`} <b>{formatClock(now - agent.since)}</b>. Play on.</span>}
+          {agent.state === 'waiting' && <span>{agentLine}{several ? crowd : ' It is waiting on you.'}</span>}
           {agent.state === 'idle' && <span>{agentName} is idle. Play on your own time.</span>}
           {agent.state === 'unpaired' && <span>Paired. Waiting for your agent&rsquo;s first signal.</span>}
         </div>
@@ -417,7 +427,7 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
           <div className="stage-overlay agent-overlay" role="dialog" aria-label="Your agent needs you">
             <p className="overlay-eyebrow">GAME PAUSED · PROGRESS SAVED</p>
             <h2>{agentLine}</h2>
-            <p>Go answer it. This run will be right here when it gets back to work.</p>
+            <p>Go answer it. This run will be right here when it gets back to work.{agent.state === 'waiting' && others ? crowd : ''}</p>
             <button className="overlay-ghost" onClick={() => setPause(null, true)}>Keep playing anyway</button>
           </div>
         )}

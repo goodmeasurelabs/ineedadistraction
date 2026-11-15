@@ -16,11 +16,16 @@ export type AgentSync = {
   agent: string | null;
   /** Local time (ms) when the current state was first seen by this tab. */
   since: number;
+  /** How many agent sessions are busy, and how many are blocked on the user. */
+  working: number;
+  waiting: number;
+  /** Server time an agent last started waiting; rises for each new one. */
+  waitedAt: number;
   /** Bumps on every state report, so effects can react to repeats. */
   seq: number;
 };
 
-const INITIAL: AgentSync = { paired: false, state: 'unpaired', reason: null, agent: null, since: 0, seq: 0 };
+const INITIAL: AgentSync = { paired: false, state: 'unpaired', reason: null, agent: null, working: 0, waiting: 0, waitedAt: 0, since: 0, seq: 0 };
 
 export function readAgentToken(): string | null {
   try {
@@ -51,7 +56,12 @@ export function useAgentSync(): AgentSync {
           if (!alive) return;
           if (data.seq !== seqRef.current) {
             seqRef.current = data.seq;
-            setSync({ paired: true, state: data.state, reason: data.reason ?? null, agent: data.agent ?? null, since: Date.now(), seq: data.seq });
+            // Keep the working clock running while other sessions come and go.
+            setSync((prev) => ({
+              paired: true, state: data.state, reason: data.reason ?? null, agent: data.agent ?? null,
+              working: Number(data.working) || 0, waiting: Number(data.waiting) || 0, waitedAt: Number(data.waitedAt) || 0,
+              since: prev.state === data.state ? prev.since : Date.now(), seq: data.seq,
+            }));
           }
           // Nothing reported yet: the first poll returns straight away, so wait before asking again.
           if (data.state === 'unpaired') await sleep(2500);

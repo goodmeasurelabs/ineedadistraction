@@ -168,7 +168,23 @@ model AgentSession {
   agent     String?   // 'codex' | 'claude-code' | other short label
   seq       Int       @default(0) // bumps on every state report
   updatedAt DateTime  @default(now())
+  working   Int       @default(0) // agent sessions busy right now
+  waiting   Int       @default(0) // agent sessions blocked on the user
+  waitedAt  DateTime? // last time any session started waiting
   seenAt    DateTime? // last time an arcade tab polled this session
 
   @@index([updatedAt])
+}
+
+// One row per agent session under a pairing token, so several agents running
+// at once do not overwrite each other. AgentSession holds the roll-up.
+model AgentRun {
+  token     String
+  run       String   // opaque per-session id chosen by the plugin
+  state     String   // 'working' | 'waiting'
+  reason    String?
+  agent     String?
+  updatedAt DateTime @default(now())
+
+  @@id([token, run])
 }

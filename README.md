@@ -26,7 +26,7 @@ Then run `/hooks` in Codex once to review and trust the plugin's hooks.
 
 Send your agent any prompt and the arcade opens in your browser, already paired. Or ask it to "open my distraction".
 
-**What the plugin sends:** the word `working`, `waiting` or `idle`; a one-word reason; which agent it is; and a random pairing token generated on your machine. Never prompts, file paths, code or tool input. Source: [`plugin/scripts/state.sh`](plugin/scripts/state.sh).
+**What the plugin sends:** the word `working`, `waiting` or `idle`; a one-word reason; which agent it is; a checksum of the session id (so several agents can be told apart); and a random pairing token generated on your machine. Never prompts, file paths, code or tool input. Source: [`plugin/scripts/state.sh`](plugin/scripts/state.sh).
 
 **Controls:** `touch ~/.config/ineedadistraction/no-auto-open` stops the arcade opening by itself; `touch ~/.config/ineedadistraction/off` turns the sync off.
 

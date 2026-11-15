@@ -31,7 +31,7 @@ if [ "$STATE" = "--request" ]; then
     exit 0
   fi
   exec curl -fsS -m 5 -X POST -H 'Content-Type: application/json' \
-    -d "{\"state\":\"$3\",\"reason\":\"$4\",\"agent\":\"$5\"}" "$BASE/api/agent/$6" 2>/dev/null
+    -d "{\"state\":\"$3\",\"reason\":\"$4\",\"agent\":\"$5\",\"session\":\"$7\"}" "$BASE/api/agent/$6" 2>/dev/null
   exit 0
 fi
 
@@ -50,7 +50,7 @@ reap_owners() {
 
 # A new shell gives the background sender its own $$ (a plain (...) does not).
 if [ "$STATE" = "--send" ]; then
-  SESSION="$REASON"
+  SESSION="$REASON"; SID="$3"
   DIR=$(cd "$DIR" 2>/dev/null && pwd -P) || exit 0
   INAD_HOME="$DIR"
   export INAD_HOME
@@ -90,9 +90,16 @@ if [ "$STATE" = "--send" ]; then
   trap 'exit 0' 1 2 15
   # Read the newest complete state only after acquiring the lock. Requests are
   # serialized; an orphaned curl retains its own marker until it exits.
-  set -- $(cat "$DIR/last" 2>/dev/null)
+  set -- $(cat "$DIR/run.$SID" 2>/dev/null)
+  [ -n "$1" ] || exit 0
   TOKEN=$(cat "$DIR/token" 2>/dev/null)
-  REPLY=$(sh "$HERE/state.sh" --request "$OWNER" "$1" "$2" "$3" "$TOKEN")
+  REPLY=$(sh "$HERE/state.sh" --request "$OWNER" "$1" "$2" "$3" "$TOKEN" "$SID")
+  if [ "$1" = "idle" ]; then
+    # The session is over: forget it, and any that ended without saying so.
+    # Unless it came back to life while this report was in flight.
+    case "$(cat "$DIR/run.$SID" 2>/dev/null)" in idle*) rm -f "$DIR/run.$SID" 2>/dev/null ;; esac
+    find "$DIR" -name 'run.*' -mtime +1 -exec rm -f {} + 2>/dev/null
+  fi
   OPEN=0
   if [ "$1" = "working" ] && [ ! -f "$DIR/no-auto-open" ] && [ -n "$SESSION" ] \
      && [ "$(cat "$DIR/opened-for" 2>/dev/null)" != "$SESSION" ]; then
@@ -113,7 +120,12 @@ fi
 # the game at most once per session) and the tool name (see "resume" below).
 INPUT=""
 if [ ! -t 0 ]; then INPUT=$(cat 2>/dev/null); fi
-field() { printf '%s' "$INPUT" | tr -d '\n' | sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -n 1; }
+# Take the first match: the hook's own fields come before any tool input,
+# which may carry keys of the same name.
+field() {
+  printf '%s' "$INPUT" | tr -d '\n' | grep -o "\"$1\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | head -n 1 \
+    | sed "s/^\"$1\"[[:space:]]*:[[:space:]]*\"//; s/\"\$//"
+}
 
 # One hooks file serves both agents, so work out which one is calling.
 if [ "$AGENT" = "auto" ]; then
@@ -136,7 +148,12 @@ if [ ! -s "$DIR/token" ]; then
   [ -s "$DIR/token" ] || finish
 fi
 
-LAST=$(cat "$DIR/last" 2>/dev/null)
+# Each agent session keeps its own last state, so several agents running at
+# once never mask each other. The server only sees a checksum of the id.
+SESSION=$(field session_id)
+SID=$(printf '%s' "$SESSION" | cksum 2>/dev/null | cut -d' ' -f1)
+[ -n "$SESSION" ] && [ -n "$SID" ] || SID=0
+LAST=$(cat "$DIR/run.$SID" 2>/dev/null)
 if [ "$STATE" = "resume" ]; then
   # Only meaningful right after a permission prompt or a question was answered.
   case "$LAST" in "waiting permission"*|"waiting question"*) ;; *) finish ;; esac
@@ -148,15 +165,14 @@ fi
 # Skip exact repeats so chatty events cost nothing.
 [ "$LAST" = "$STATE $REASON $AGENT" ] && finish
 # Readers must see either the previous state or the complete new state.
-if ! { printf '%s %s %s' "$STATE" "$REASON" "$AGENT" > "$DIR/last.$$" &&
-  mv -f "$DIR/last.$$" "$DIR/last"; } 2>/dev/null; then
-  rm -f "$DIR/last.$$" 2>/dev/null
+if ! { printf '%s %s %s' "$STATE" "$REASON" "$AGENT" > "$DIR/tmp.$$" &&
+  cp "$DIR/tmp.$$" "$DIR/last" && mv -f "$DIR/tmp.$$" "$DIR/run.$SID"; } 2>/dev/null; then
+  rm -f "$DIR/tmp.$$" 2>/dev/null
   finish
 fi
-SESSION=$(field session_id)
 
 (
-  exec sh "$HERE/state.sh" --send "$SESSION"
+  exec sh "$HERE/state.sh" --send "$SESSION" "$SID"
 ) </dev/null >/dev/null 2>&1 &
 
 finish
