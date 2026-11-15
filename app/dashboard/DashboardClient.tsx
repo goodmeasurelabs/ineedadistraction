@@ -9,6 +9,7 @@ import WidgetCard from "@/app/components/WidgetCard";
 import CreateModal from "@/app/components/CreateModal";
 import BreakButton, { type DailyTeaser } from "@/app/components/BreakButton";
 import MakerSection from "@/app/components/MakerSection";
+import GameShelf from "@/app/games/GameShelf";
 import { GameCards, SiteFooter } from "@/app/components/SiteChrome";
 import { trackCTAClick, trackContentEngagement } from "@/app/lib/analytics";
 
@@ -169,6 +170,19 @@ function HomeContent({ initialWidgets, daily }: { initialWidgets: Widget[]; dail
       <main className="distraction-main">
         {showWelcome && <WelcomeBanner onDismiss={() => setShowWelcome(false)} />}
         {sort !== 'mine' && <BreakButton community={community} daily={daily} />}
+        {sort !== 'mine' && (
+          <section className="play-hero" aria-labelledby="arcade-title">
+            <div className="play-hero-top">
+              <h2 id="arcade-title">Got longer? Just one <em>more</em> run.</h2>
+              <p>Four deeper games built to be hard to put down. Your run saves itself, so you can leave mid-game and come back.</p>
+            </div>
+            <GameShelf location="home" />
+            <div className="agent-strip">
+              <div><i aria-hidden="true" /><p style={{ margin: 0 }}><strong>Coding with Codex or Claude Code?</strong><span>Play while your agent works. The game pauses the second it needs you.</span></p></div>
+              <a href="/agent" onClick={() => trackCTAClick({ cta_text: 'Pair your agent', cta_location: 'home_agent_strip' })}>Pair your agent ↗</a>
+            </div>
+          </section>
+        )}
         {sort !== 'mine' && (
           <section className="bb-section" aria-labelledby="games-title">
             <div className="community-intro"><div><p className="magic-eyebrow">ONE NAME, ONE NUMBER</p><h2 id="games-title">The games in the button.</h2></div><p>Each one is under two minutes and ends on a score you can share. <a href="/games">All games ↗</a></p></div>

@@ -1,4 +1,5 @@
 import { BREAK_GAMES } from './breakGames';
+import { GAMES } from '../games/registry';
 import { dailyChallenge, utcDate } from './daily';
 import { AT_WORK, BRAIN_BREAK, FIVE_MINUTE } from './landings';
 import { SITE_URL } from './share';
@@ -19,6 +20,10 @@ export function buildLlmsTxt(today: string = utcDate()): string {
     '## Games',
     ...BREAK_GAMES.map((game) => `- [${game.name}](${SITE_URL}/games/${game.slug}): ${game.tagline} ${game.roundLabel}; scored in ${game.scoreLabel} (${game.better} is better).`),
     '',
+    '## Arcade (longer runs)',
+    ...GAMES.map((game) => `- [${game.title}](${SITE_URL}/games/${game.slug}): ${game.tagline} ${game.description}`),
+    `- [Play while your coding agent works](${SITE_URL}/agent): a free plugin for Codex and Claude Code pairs the arcade with your agent. The game pauses the moment the agent needs your input or finishes.`,
+    '',
     '## Pages for a specific kind of break',
     ...landing,
     '',
@@ -28,7 +33,7 @@ export function buildLlmsTxt(today: string = utcDate()): string {
     '## Facts',
     '- Playing needs no account. Publishing a made game needs an account.',
     '- Scores are kept in the player\'s browser; there is no public leaderboard.',
-    '- Games are silent and work with touch, mouse or keyboard.',
+    '- Break games are silent; arcade games have sound with a mute button. All work with touch, mouse or keyboard.',
     `- [Privacy](${SITE_URL}/privacy) · [Terms](${SITE_URL}/terms) · [Sitemap](${SITE_URL}/sitemap.xml)`,
     '',
   ].join('\n');

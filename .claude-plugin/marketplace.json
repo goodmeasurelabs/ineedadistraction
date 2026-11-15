@@ -1,0 +1,13 @@
+{
+  "name": "ineedadistraction",
+  "owner": {
+    "name": "Good Measure Labs"
+  },
+  "plugins": [
+    {
+      "name": "distraction",
+      "source": "./plugin",
+      "description": "Play a game from ineedadistraction.com while your coding agent works. It pauses the moment the agent finishes or needs you."
+    }
+  ]
+}

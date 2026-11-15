@@ -4,6 +4,8 @@ import GamePlayer from '../../components/GamePlayer';
 import { GameCards, PageShell } from '../../components/SiteChrome';
 import { BREAK_GAMES, formatScore, getBreakGame, hashString, parseScore } from '../../lib/breakGames';
 import { utcDate } from '../../lib/daily';
+import { getGame } from '../registry';
+import GameClient from './GameClient';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +14,19 @@ type Search = Promise<{ score?: string }>;
 
 export async function generateMetadata({ params, searchParams }: { params: Params; searchParams: Search }): Promise<Metadata> {
   const { slug } = await params;
+  // The arcade games (long runs, canvas engine) share this URL space with the
+  // two-minute break games; slugs never overlap.
+  const arcade = getGame(slug);
+  if (arcade) {
+    const title = `${arcade.title}: ${arcade.tagline}`;
+    return {
+      title: `${arcade.title} · I Need a Distraction`,
+      description: arcade.description,
+      alternates: { canonical: `/games/${arcade.slug}` },
+      openGraph: { title, description: arcade.description, url: `/games/${arcade.slug}`, images: [`/shelf/${arcade.slug}.jpg`], siteName: 'I Need a Distraction', type: 'website' },
+      twitter: { card: 'summary_large_image', title, description: arcade.description, images: [`/shelf/${arcade.slug}.jpg`] },
+    };
+  }
   const game = getBreakGame(slug);
   if (!game) return { title: 'Game not found · I Need a Distraction', robots: { index: false, follow: false } };
   const score = parseScore(game.unit, (await searchParams).score);
@@ -28,6 +43,19 @@ export async function generateMetadata({ params, searchParams }: { params: Param
 
 export default async function GamePage({ params, searchParams }: { params: Params; searchParams: Search }) {
   const { slug } = await params;
+  const arcade = getGame(slug);
+  if (arcade) {
+    const jsonLd = {
+      '@context': 'https://schema.org', '@type': 'VideoGame', name: arcade.title, description: arcade.description,
+      url: `https://www.ineedadistraction.com/games/${arcade.slug}`, genre: arcade.tags, gamePlatform: 'Web browser', isAccessibleForFree: true,
+    };
+    return (
+      <>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }} />
+        <GameClient slug={arcade.slug} />
+      </>
+    );
+  }
   const game = getBreakGame(slug);
   if (!game) notFound();
   const friendScore = parseScore(game.unit, (await searchParams).score);

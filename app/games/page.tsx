@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { GameCards, PageShell } from '../components/SiteChrome';
 import { getWidgets } from '../lib/store';
+import GameShelf from './GameShelf';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +23,13 @@ export default async function GamesIndex() {
         <p className="bb-lede">Every game here fits in a break: under two minutes, no sign-up, no sound, and it ends on a number you can share. Can’t choose? <a href="/">Press Distract me</a> or play <a href="/daily">today’s daily</a>.</p>
       </header>
       <GameCards headingLevel={2} />
+      <section className="play-hero" aria-labelledby="arcade-title">
+        <div className="play-hero-top">
+          <h2 id="arcade-title">The arcade: just one <em>more</em> run.</h2>
+          <p>Four longer games with sound, upgrades and a daily seed. Runs save themselves. <a href="/agent">Play while your coding agent works ↗</a></p>
+        </div>
+        <GameShelf location="games_index" />
+      </section>
       {players.length > 0 && (
         <section className="bb-prose" aria-labelledby="players-title">
           <h2 id="players-title">Made by players</h2>

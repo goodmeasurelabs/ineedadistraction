@@ -156,3 +156,19 @@ model Report {
   @@index([widgetId])
   @@index([createdAt])
 }
+
+// Agent Mode: one row per paired coding-agent install (Codex / Claude Code).
+// The plugin's hooks POST the agent's state here and the arcade page reads it
+// to pause the game the moment the agent needs its human. The token is a random
+// secret generated on the user's machine; nothing about their code is stored.
+model AgentSession {
+  token     String    @id
+  state     String    // 'working' | 'waiting' | 'idle'
+  reason    String?   // 'prompt' | 'done' | 'permission' | 'question' | 'end'
+  agent     String?   // 'codex' | 'claude-code' | other short label
+  seq       Int       @default(0) // bumps on every state report
+  updatedAt DateTime  @default(now())
+  seenAt    DateTime? // last time an arcade tab polled this session
+
+  @@index([updatedAt])
+}

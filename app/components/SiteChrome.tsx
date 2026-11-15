@@ -27,6 +27,7 @@ export function SiteFooter() {
         <a href="/games-to-play-at-work">Games to play at work</a>
         <a href="/5-minute-games">5-minute games</a>
         <a href="/make-a-game">AI game maker</a>
+        <a href="/agent">Play while your agent codes</a>
         <a href="/privacy">Privacy</a>
         <a href="/terms">Terms</a>
         <span>© {new Date().getFullYear()} I Need a Distraction</span>

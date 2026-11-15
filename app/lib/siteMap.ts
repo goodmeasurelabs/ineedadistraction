@@ -1,4 +1,5 @@
 import { BREAK_GAMES } from './breakGames';
+import { GAMES } from '../games/registry';
 import { AT_WORK, BRAIN_BREAK, FIVE_MINUTE } from './landings';
 
 // Public, indexable pages that exist without a database. Shared by
@@ -8,6 +9,8 @@ export const STATIC_PATHS: string[] = [
   '/daily',
   '/games',
   ...BREAK_GAMES.map((game) => `/games/${game.slug}`),
+  ...GAMES.map((game) => `/games/${game.slug}`),
+  '/agent',
   BRAIN_BREAK.path,
   AT_WORK.path,
   FIVE_MINUTE.path,

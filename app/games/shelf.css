@@ -1,0 +1,51 @@
+.shelf { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
+.shelf-card {
+  --accent: #dcf998; position: relative; display: flex; flex-direction: column; text-decoration: none; color: inherit;
+  border-radius: 20px; overflow: hidden; background: #171f1c; border: 1px solid #ffffff14;
+  transition: transform .18s cubic-bezier(.2, .9, .3, 1.3), border-color .18s, box-shadow .18s;
+}
+.shelf-card:hover { transform: translateY(-5px); border-color: color-mix(in srgb, var(--accent) 70%, transparent); box-shadow: 0 18px 50px -18px color-mix(in srgb, var(--accent) 55%, transparent); }
+.shelf-card:active { transform: translateY(-1px) scale(.99); }
+.shelf-art {
+  position: relative; aspect-ratio: 4 / 5; overflow: hidden;
+  background: radial-gradient(circle at 30% 20%, var(--art-b), transparent 60%), linear-gradient(160deg, var(--art-a), #07090d);
+}
+.shelf-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform .5s ease; }
+.shelf-card:hover .shelf-art img { transform: scale(1.06); }
+.shelf-art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(transparent 55%, #0b100ee6); pointer-events: none; }
+.shelf-glyph { position: absolute; inset: 0; display: grid; place-items: center; font-size: 84px; color: var(--accent); text-shadow: 0 0 40px var(--accent); z-index: -1; }
+.shelf-art img[style*="none"] ~ .shelf-glyph { z-index: 0; }
+.shelf-pace {
+  position: absolute; left: 12px; top: 12px; z-index: 2; padding: 5px 10px; border-radius: 99px; font: 700 9px/1 monospace; letter-spacing: 1.2px; text-transform: uppercase;
+  background: #0b100ecc; color: #dfe6dc; border: 1px solid #ffffff22; backdrop-filter: blur(6px);
+}
+.shelf-play {
+  position: absolute; right: 12px; bottom: 12px; z-index: 2; padding: 9px 15px; border-radius: 99px; font-size: 12px; font-weight: 800;
+  background: var(--accent); color: #0c1410; box-shadow: 0 0 26px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+.shelf-body { padding: 15px 17px 17px; display: flex; flex-direction: column; gap: 5px; }
+.shelf-body h3 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -.3px; color: #f2f4ec; }
+.shelf-body p { margin: 0; font-size: 13px; line-height: 1.4; color: #aab3a8; min-height: 2.8em; }
+.shelf-body small { font: 600 10px/1.2 monospace; letter-spacing: .6px; color: var(--accent); text-transform: uppercase; margin-top: 4px; }
+@media (max-width: 980px) { .shelf { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .shelf { gap: 12px; } .shelf-body { padding: 12px; } .shelf-body h3 { font-size: 16px; } .shelf-body p { font-size: 12px; } .shelf-art { aspect-ratio: 1; } }
+@media (prefers-reduced-motion: reduce) { .shelf-card, .shelf-art img { transition: none; } }
+
+/* Home hero that leads with the games. */
+.play-hero { padding: 54px 0 26px; }
+.play-hero-top { display: flex; align-items: end; justify-content: space-between; gap: 32px; margin-bottom: 30px; }
+.play-hero :is(h1, h2) { margin: 0; font-size: clamp(30px, 4.4vw, 50px); font-weight: 500; letter-spacing: -1.6px; line-height: 1.02; color: #f2f4ec; }
+.play-hero :is(h1, h2) em { font-style: normal; color: #dcf998; }
+.play-hero-top p { margin: 0; max-width: 34ch; font-size: 15px; line-height: 1.5; color: #aab3a8; }
+.agent-strip {
+  margin-top: 22px; display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap;
+  padding: 18px 22px; border-radius: 18px; background: linear-gradient(100deg, #1b2a1f, #151b22); border: 1px solid #dcf99833;
+}
+.agent-strip div { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.agent-strip i { flex: none; width: 10px; height: 10px; border-radius: 50%; background: #6dffa8; box-shadow: 0 0 0 0 #6dffa8aa; animation: strip-pulse 1.6s ease-out infinite; }
+@keyframes strip-pulse { 70% { box-shadow: 0 0 0 10px #6dffa800; } 100% { box-shadow: 0 0 0 0 #6dffa800; } }
+.agent-strip strong { display: block; font-size: 15px; font-weight: 600; color: #f2f4ec; }
+.agent-strip span { font-size: 13px; color: #aab3a8; }
+.agent-strip a { flex: none; padding: 11px 18px; border-radius: 99px; background: #dcf998; color: #17221b; font-size: 12px; font-weight: 700; text-decoration: none; }
+.agent-strip a:hover { background: #e9ffb5; }
+@media (max-width: 720px) { .play-hero { padding-top: 34px; } .play-hero-top { flex-direction: column; align-items: start; gap: 14px; } }
