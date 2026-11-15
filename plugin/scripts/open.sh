@@ -5,7 +5,8 @@
 #   open.sh --background  same, quietly (used by the hooks)
 #   open.sh --print       only print the link
 # With a Chromium browser installed the game opens as a small pop-up window of
-# its own, sized to sit beside a terminal. Otherwise, or if the file "no-popup"
+# its own, sized to sit beside a terminal. On macOS that window is remembered
+# (state file "window") and brought back to the front on later calls. Otherwise, or if the file "no-popup"
 # exists in the state directory, it opens as a normal tab.
 DIR="${INAD_HOME:-$HOME/.config/ineedadistraction}"
 BASE="${INAD_URL:-https://www.ineedadistraction.com}"
@@ -22,12 +23,18 @@ esac
 
 POPUP_ARGS="--app=$URL&popup --window-size=460,800"
 if [ ! -f "$DIR/no-popup" ] && [ "$(uname)" = "Darwin" ]; then
+  RAISE="$(dirname "$0")/raise.js"
+  # One pop-up, not one per call: if the last one is still open, resurface it.
+  if [ "$(osascript -l JavaScript "$RAISE" existing "$DIR/window" 2>/dev/null)" = ok ]; then
+    [ "$QUIET" = 1 ] || echo "$URL"; exit 0
+  fi
   for APP in "Google Chrome" "Brave Browser" "Microsoft Edge" "Chromium"; do
     if [ -d "/Applications/$APP.app" ] || [ -d "$HOME/Applications/$APP.app" ]; then
       # shellcheck disable=SC2086
       if open -na "$APP" --args $POPUP_ARGS; then
-        # Bring it in front of the terminal once the page has shaped it.
-        osascript -l JavaScript "$(dirname "$0")/raise.js" "$APP" >/dev/null 2>&1 &
+        # Bring it in front of the terminal once the page has shaped it, and
+        # remember which window it is.
+        osascript -l JavaScript "$RAISE" new "$APP" "$DIR/window" >/dev/null 2>&1 &
         [ "$QUIET" = 1 ] || echo "$URL"; exit 0
       fi
     fi
