@@ -13,6 +13,8 @@ The scripts live in this plugin's `scripts/` folder, two levels above this file.
 
 Run `sh <plugin>/scripts/open.sh`. It opens the paired arcade in the browser and prints the link. Then keep working; do not wait for the user to play.
 
+On macOS with a Chromium browser the game is a small pop-up window in a browser instance of its own (profile in `~/.config/ineedadistraction/browser`), so it has its own saves and sign-in. Running `open.sh` again brings that same window back to the front; it does not open a second one.
+
 If no browser can be opened (remote shell, container), run `open.sh --print` and give the user the link.
 
 ## Controls
@@ -25,6 +27,7 @@ State lives in `~/.config/ineedadistraction/`.
 | Let it open by itself again | `rm ~/.config/ineedadistraction/no-auto-open` |
 | Turn the sync off completely | `touch ~/.config/ineedadistraction/off` |
 | Turn it back on | `rm ~/.config/ineedadistraction/off` |
+| Open the game as a normal browser tab, not a pop-up | `touch ~/.config/ineedadistraction/no-popup` |
 | Unpair this machine | `rm ~/.config/ineedadistraction/token` (the next open pairs afresh) |
 
 ## If the game does not pause or resume
