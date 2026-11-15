@@ -1,0 +1,15 @@
+{
+  "name": "distraction",
+  "version": "0.1.1",
+  "description": "Play a game from ineedadistraction.com while your coding agent works. It pauses the moment the agent finishes or needs you.",
+  "homepage": "https://www.ineedadistraction.com/agent",
+  "repository": "https://github.com/goodmeasurelabs/ineedadistraction",
+  "license": "MIT",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "I Need a Distraction",
+    "shortDescription": "A game that pauses when your agent needs you.",
+    "developerName": "Good Measure Labs",
+    "category": "Productivity"
+  }
+}
