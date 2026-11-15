@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { consumePendingAuth } from '@/app/lib/authStore';
 import { addWidget } from '@/app/lib/store';
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000';
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.ineedadistraction.com';
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);

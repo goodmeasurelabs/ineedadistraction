@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { compactHtml, extractHtmlDocument } from '@/app/lib/htmlCompact';
 import { enforceRateLimit } from '@/app/lib/rateLimit';
+import { generateWithAstra, usesAstra } from '@/app/lib/astra';
 
 const client = new Anthropic();
 
@@ -62,11 +63,12 @@ function isCreditExhausted(err: unknown): boolean {
   return msg.toLowerCase().includes('credit balance');
 }
 
-async function callSonnetWithRetry(stableUserContent: string, dynamicUserContent: string) {
+async function callGameModelWithRetry(stableUserContent: string, dynamicUserContent: string, signal?: AbortSignal) {
   const delays = [500, 1500];
   let lastErr: unknown;
   for (let attempt = 0; attempt <= delays.length; attempt++) {
     try {
+      if (usesAstra()) return await generateWithAstra(STEP_SYSTEM_PROMPT, `${stableUserContent}\n\n${dynamicUserContent}`, signal);
       // Stream under the hood — non-streaming requests with max_tokens this
       // high get rejected by the SDK as potentially exceeding 10 min. The
       // returned Message has the same shape (.content, .stop_reason, .usage).
@@ -90,7 +92,7 @@ async function callSonnetWithRetry(stableUserContent: string, dynamicUserContent
               { type: 'text', text: dynamicUserContent },
             ],
           }],
-        })
+        }, { signal })
         .finalMessage();
     } catch (err) {
       lastErr = err;
@@ -121,7 +123,7 @@ export async function POST(req: Request) {
   if (!currentHtml || typeof currentHtml !== 'string') {
     return NextResponse.json({ error: 'currentHtml is required' }, { status: 400 });
   }
-  if (!Array.isArray(allSteps) || typeof stepIndex !== 'number' || stepIndex < 0 || stepIndex >= allSteps.length) {
+  if ((planSummary !== undefined && (typeof planSummary !== 'string' || planSummary.length > 4000)) || !Array.isArray(allSteps) || allSteps.length > 8 || allSteps.some((s: unknown) => typeof s !== 'string' || s.length > 2000) || !Number.isInteger(stepIndex) || typeof stepIndex !== 'number' || stepIndex < 0 || stepIndex >= allSteps.length) {
     return NextResponse.json({ error: 'allSteps[] and valid stepIndex required' }, { status: 400 });
   }
 
@@ -156,8 +158,8 @@ Modify the HTML above to implement ONLY the current step. Return the complete mo
 
   const startedAt = Date.now();
   try {
-    const message = await callSonnetWithRetry(stableUserContent, dynamicUserContent);
-    const anthropicMs = Date.now() - startedAt;
+    const message = await callGameModelWithRetry(stableUserContent, dynamicUserContent, req.signal);
+    const generationMs = Date.now() - startedAt;
     if (message.stop_reason === 'max_tokens') throw new TruncatedOutputError();
 
     const content = message.content[0];
@@ -181,11 +183,12 @@ Modify the HTML above to implement ONLY the current step. Return the complete mo
     } | undefined;
     console.log(JSON.stringify({
       event: 'step_done',
+      model: usesAstra() ? 'gpt-6-astra' : 'claude-sonnet-4-6',
       stepIndex,
       stepCount: allSteps.length,
       htmlInBytes: compactedHtml.length,
       htmlOutBytes: html.length,
-      anthropicMs,
+      generationMs,
       inputTokens: usage?.input_tokens,
       outputTokens: usage?.output_tokens,
       cacheReadTokens: usage?.cache_read_input_tokens ?? 0,
@@ -206,7 +209,7 @@ Modify the HTML above to implement ONLY the current step. Return the complete mo
       return NextResponse.json({ error: 'This step produced too much code to fit in one generation. Try splitting it into smaller steps.' }, { status: 500 });
     }
     if (err instanceof CreditExhaustedError) {
-      return NextResponse.json({ error: "AI service is temporarily unavailable. The site owner has been notified." }, { status: 503 });
+      return NextResponse.json({ error: "AI service is temporarily unavailable. Please try again later." }, { status: 503 });
     }
     if (err instanceof OverloadedError) {
       return NextResponse.json({ error: "Anthropic's servers are slammed. Try retrying this step in a moment." }, { status: 503 });

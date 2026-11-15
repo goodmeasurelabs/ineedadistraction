@@ -1,0 +1,21 @@
+{
+  "purpose": "Compare working-game latency and quality on identical tasks; not a live benchmark result.",
+  "repetitionsPerProvider": 3,
+  "providers": ["anthropic", "openai"],
+  "fixtures": [
+    {"id":"reflex", "prompt":"Create a 20-second game where tapping glowing stars earns points and tapping X-shaped decoys loses points. Support phone touch and keyboard, show score and a replay button."},
+    {"id":"one-button", "prompt":"Create a one-button game where a cat with a jetpack dodges clouds and collects fish. Use procedural art, short rounds, a visible score, and a big replay button. Support touch and Space."},
+    {"id":"cozy", "prompt":"Create an untimed garden toy where tapping grows glowing plants. Include three plant types, a visible collection count, a gentle surprise, and a reset button. Work on phones."},
+    {"id":"logic", "prompt":"Create a 3-by-3 lights-out puzzle. Guarantee that the starting puzzle is solvable, count moves, detect a win, and offer another puzzle. Support phone and keyboard input."},
+    {"id":"platform", "prompt":"Create a compact one-button jumping game with three short levels and surprising moving platforms. Include checkpoint restart and a clear win screen. Touch and Space must work."},
+    {"id":"memory", "prompt":"Create a six-pair memory game with drawn geometric symbols, a move counter, match detection, and restart. Ignore extra clicks while an unmatched pair is being hidden."},
+    {"id":"theme-remix", "templateId":"orbit-pop", "twist":"classic", "prompt":"Turn the star game into a firefly forest, preserving timer, score, combos, decoys, pause and replay. Draw fireflies and distinguish decoys by shape."},
+    {"id":"mechanic-remix", "templateId":"orbit-pop", "twist":"classic", "prompt":"Add a rare golden star worth 50 points. Keep all original mechanics working, and explain the golden star in one short sentence."},
+    {"id":"cozy-remix", "templateId":"orbit-pop", "twist":"garden", "prompt":"Add a visible garden that blooms a new flower every five catches. Keep the game untimed and preserve the finish-round and replay buttons."},
+    {"id":"quiz-remix", "templateId":"math-quiz", "prompt":"Make this a multiplication-only quiz with an easy and hard mode. Keep the timer, feedback, scoring and replay working."},
+    {"id":"mobile-remix", "templateId":"memory-sequence", "prompt":"Make the game fit a 320px-wide phone viewport with readable instructions and touch targets at least 44px. Preserve all rules and restart behavior."},
+    {"id":"odd-remix", "templateId":"odd-one-out", "prompt":"Turn this into spotting a tiny alien among friendly robots. Use procedural drawings, preserve all rules, and increase visual difficulty gradually."}
+  ],
+  "runtimeChecks": ["start", "input changes state", "score correctness", "end condition", "restart resets state", "phone overflow", "keyboard access", "no console errors"],
+  "measurements": ["provider", "model", "fixture", "repetition", "total_ms", "input_tokens", "output_tokens", "retry_count", "first_attempt_playable", "final_playable", "mobile_pass", "fun_rating_1_to_5", "cost_including_retries"]
+}

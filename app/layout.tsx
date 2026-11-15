@@ -21,15 +21,15 @@ const arcadeFont = VT323({
 });
 
 const SITE_DESCRIPTION =
-  "Describe a clever little brain game — AI builds it in 60 seconds. Play, remix, and share community-made mini-games.";
+  "Tiny games for a better break. Play instantly, try a surprising twist, and make your own mini-game with AI.";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.ineedadistraction.com"),
-  title: "I Need a Distraction — build & remix AI brain games",
+  title: "I Need a Distraction — tiny games, happy accidents",
   description: SITE_DESCRIPTION,
   // opengraph-image.tsx at the app root is auto-wired as the default og/twitter image.
   openGraph: {
-    title: "I Need a Distraction — build & remix AI brain games",
+    title: "I Need a Distraction — tiny games, happy accidents",
     description: SITE_DESCRIPTION,
     url: "https://www.ineedadistraction.com",
     siteName: "I Need a Distraction",
@@ -37,7 +37,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "I Need a Distraction — build & remix AI brain games",
+    title: "I Need a Distraction — tiny games, happy accidents",
     description: SITE_DESCRIPTION,
   },
 };

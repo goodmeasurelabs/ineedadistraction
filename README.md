@@ -1,5 +1,51 @@
 # I Need a Distraction
 
+Games built to be hard to put down, at [ineedadistraction.com](https://www.ineedadistraction.com). Play in the browser, or pair it with your coding agent and play while it works.
+
+## Play while your agent works (Codex and Claude Code)
+
+The plugin tells the arcade whether your agent is working or waiting. The game pauses the moment the agent finishes a turn, asks a question or needs a permission, and resumes when you answer.
+
+**Claude Code**
+
+```
+/plugin marketplace add goodmeasurelabs/ineedadistraction
+/plugin install distraction@ineedadistraction
+```
+
+On Claude Code 2.1.275 or later this is one step: `/plugin install distraction --marketplace goodmeasurelabs/ineedadistraction`
+
+**Codex**
+
+```
+codex plugin marketplace add goodmeasurelabs/ineedadistraction
+codex plugin add distraction@ineedadistraction
+```
+
+Then run `/hooks` in Codex once to review and trust the plugin's hooks.
+
+Send your agent any prompt and the arcade opens in your browser, already paired. Or ask it to "open my distraction".
+
+**What the plugin sends:** the word `working`, `waiting` or `idle`; a one-word reason; which agent it is; and a random pairing token generated on your machine. Never prompts, file paths, code or tool input. Source: [`plugin/scripts/state.sh`](plugin/scripts/state.sh).
+
+**Controls:** `touch ~/.config/ineedadistraction/no-auto-open` stops the arcade opening by itself; `touch ~/.config/ineedadistraction/off` turns the sync off.
+
+## The games
+
+| Game | What it is |
+|---|---|
+| Afterglow | One click sets off a chain reaction. Clear each wave's quota, pick an upgrade. |
+| Tessel | Untimed shape placing. Clear rows and columns, keep the streak. |
+| Critical Mass | Drop numbered cores; equal ones fuse and double. |
+| Prime Time | Build number hands, stack multipliers, collect rule-bending charms. |
+
+Game code lives in `app/games/<slug>/`; the shared stage (frame loop, pause, bloom, sound, saving, Agent Mode) is in `app/games/engine/`.
+
+---
+
+## Earlier README
+
+
 A fun, interactive website designed to give people a quick mental break during their day. Perfect for when you need a distraction from work!
 
 ## Features

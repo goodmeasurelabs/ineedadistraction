@@ -25,7 +25,8 @@ Each turn, classify your response as one of three kinds and return ONLY JSON:
 DECISION RULES:
 - Ambiguous request → "chat" with a clarifying question
 - Simple, self-contained change → "generate"
-- Multi-step or new-mechanic change → "plan"
+- A clear new game idea, including new mechanics → "generate". Build a small complete playable first version in ONE generation.
+- Use "plan" only when the user explicitly asks for a plan or a staged major rebuild.
 - User refining a plan you proposed AND asking you to proceed (e.g. "go for it", "ship it", "let's build", "yes but change X") → "generate" with an updated instruction that incorporates their tweaks. Do NOT use "chat" here.
 - User refining a plan WITHOUT asking to proceed (just discussing, asking questions) → "chat" or revised "plan"
 
@@ -86,8 +87,8 @@ export async function POST(req: Request) {
   if (limited) return limited;
 
   const { draftId: incomingDraftId, userMessage, currentHtml, templateId, emoji } = await req.json();
-  if (!userMessage || typeof userMessage !== 'string') {
-    return NextResponse.json({ error: 'userMessage is required' }, { status: 400 });
+  if (typeof userMessage !== 'string' || !userMessage.trim() || userMessage.length > 4000 || (currentHtml !== undefined && (typeof currentHtml !== 'string' || currentHtml.length > 500000))) {
+    return NextResponse.json({ error: 'Send a message of 1–4,000 characters and a game under 500 KB.' }, { status: 400 });
   }
 
   // Resolve or create the draft so we have somewhere to attach messages.
@@ -97,7 +98,7 @@ export async function POST(req: Request) {
     if (!draft) return NextResponse.json({ error: 'Draft not found' }, { status: 404 });
     if (!ownsDraft(draft, owner)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   } else {
-    if (!templateId || !currentHtml) {
+    if (typeof templateId !== 'string' || !templateId || templateId.length > 100 || !currentHtml) {
       return NextResponse.json({ error: 'templateId and currentHtml required when no draftId' }, { status: 400 });
     }
     const newDraft = await createDraft(

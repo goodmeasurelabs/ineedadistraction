@@ -1,3 +1,4 @@
+import { validateGame } from '@/app/lib/publishValidation';
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { deleteWidget, getWidget, getWidgetForOwner, updateWidget } from '@/app/lib/store';
@@ -34,6 +35,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return NextResponse.json({ error: 'Invalid game' }, { status: 400 });
+  const invalid = validateGame(body, true);
+  if (invalid) return NextResponse.json({ error: invalid }, { status: 400 });
   const updated = await updateWidget(id, userId, body);
   if (!updated) {
     // Either the widget doesn't exist or the caller isn't the author.
