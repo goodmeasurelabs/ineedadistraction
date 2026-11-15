@@ -35,4 +35,4 @@ State lives in `~/.config/ineedadistraction/`.
 
 ## What is sent
 
-Only four things: the word `working`, `waiting` or `idle`; a one-word reason (`prompt`, `done`, `permission`, `question`, `end`); which agent it is; and a random pairing token made on this machine. Never prompts, file paths, code or tool input.
+Only five things: the word `working`, `waiting` or `idle`; a one-word reason (`prompt`, `done`, `permission`, `question`, `end`); which agent it is; a checksum of the session id (so several agents can be told apart); and a random pairing token made on this machine. Never prompts, file paths, code or tool input.
