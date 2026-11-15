@@ -25,7 +25,15 @@ if [ ! -f "$DIR/no-popup" ] && [ "$(uname)" = "Darwin" ]; then
   for APP in "Google Chrome" "Brave Browser" "Microsoft Edge" "Chromium"; do
     if [ -d "/Applications/$APP.app" ] || [ -d "$HOME/Applications/$APP.app" ]; then
       # shellcheck disable=SC2086
-      open -na "$APP" --args $POPUP_ARGS && { [ "$QUIET" = 1 ] || echo "$URL"; exit 0; }
+      if open -na "$APP" --args $POPUP_ARGS; then
+        # A browser that is already running makes the window without coming
+        # forward, so it lands behind the terminal. Activate the app once the
+        # hand-off has settled, without "open -a": that sends a reopen event,
+        # which raises the browser's main window instead of the new pop-up.
+        sleep 0.5
+        osascript -l JavaScript -e 'function run(a){ObjC.import("AppKit");$.NSWorkspace.sharedWorkspace.runningApplications.js.forEach(function(p){if(p.localizedName.js===a[0])p.activateWithOptions(2)})}' "$APP" >/dev/null 2>&1
+        [ "$QUIET" = 1 ] || echo "$URL"; exit 0
+      fi
     fi
   done
 elif [ ! -f "$DIR/no-popup" ] && [ -z "$WSL_DISTRO_NAME" ]; then
