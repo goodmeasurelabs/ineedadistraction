@@ -11,7 +11,6 @@ The existing research is in `revitalization-research-2026-09-22.md`. This launch
 - Immediate Orbit Pop, three instant preset moods, score challenges, device-local personal bests, downloadable score cards, and dynamic social preview cards for challenge URLs. Scores are friendly, self-reported challenges, not a verified leaderboard.
 - Phone-native sharing on games and cards, with clipboard fallback. Share URLs carry campaign attribution. Challenge arrivals, first plays, completions, shares, and successful publishing have analytics events.
 - Mobile Build/Play tabs preserve the same iframe while giving each view the screen. Large controls, dynamic viewport height, safe-area padding, and 16px editor input prevent the cramped split view and iOS text zoom.
-- AI review reads the complete generated document rather than cutting off scripts at 6,000 characters, and repairs the actual game instead of starting over from the original prompt.
 - Clear game ideas default to one complete generation rather than a 3–5-stage plan. Existing Anthropic provider remains active; Astra adapter is opt-in and not configured for production.
 - Draft URLs survive refresh. Save failures surface honestly. Guests save before Clerk sign-in and return to publishing their draft. Public publishing requires an account, assigns ownership, checks remix eligibility, validates fields, and rate-limits publishing.
 - Guest AI limits use platform IP instead of a resettable client ID. AI calls stop when the rate-limit database is unavailable. Draft writes whitelist editable fields.

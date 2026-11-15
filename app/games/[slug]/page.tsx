@@ -1,35 +1,91 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { GAMES, getGame } from '../registry';
+import GamePlayer from '../../components/GamePlayer';
+import { GameCards, PageShell } from '../../components/SiteChrome';
+import { BREAK_GAMES, formatScore, getBreakGame, hashString, parseScore } from '../../lib/breakGames';
+import { utcDate } from '../../lib/daily';
+import { getGame } from '../registry';
 import GameClient from './GameClient';
 
-export function generateStaticParams() { return GAMES.map((game) => ({ slug: game.slug })); }
+export const dynamic = 'force-dynamic';
 
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
-  const game = getGame((await params).slug);
-  if (!game) return {};
-  const title = `${game.title}: ${game.tagline}`;
+type Params = Promise<{ slug: string }>;
+type Search = Promise<{ score?: string }>;
+
+export async function generateMetadata({ params, searchParams }: { params: Params; searchParams: Search }): Promise<Metadata> {
+  const { slug } = await params;
+  // The arcade games (long runs, canvas engine) share this URL space with the
+  // two-minute break games; slugs never overlap.
+  const arcade = getGame(slug);
+  if (arcade) {
+    const title = `${arcade.title}: ${arcade.tagline}`;
+    return {
+      title: `${arcade.title} · I Need a Distraction`,
+      description: arcade.description,
+      alternates: { canonical: `/games/${arcade.slug}` },
+      openGraph: { title, description: arcade.description, url: `/games/${arcade.slug}`, images: [`/shelf/${arcade.slug}.jpg`], siteName: 'I Need a Distraction', type: 'website' },
+      twitter: { card: 'summary_large_image', title, description: arcade.description, images: [`/shelf/${arcade.slug}.jpg`] },
+    };
+  }
+  const game = getBreakGame(slug);
+  if (!game) return { title: 'Game not found · I Need a Distraction', robots: { index: false, follow: false } };
+  const score = parseScore(game.unit, (await searchParams).score);
+  const title = score !== null ? `${formatScore(game.unit, score)} on ${game.name}. Your turn.` : `${game.name} · a tiny free game, no sign-up · I Need a Distraction`;
+  const image = `/games/${slug}/card${score !== null ? `?score=${score}` : ''}`;
   return {
-    title: `${game.title} · I Need a Distraction`,
-    description: game.description,
-    alternates: { canonical: `/games/${game.slug}` },
-    openGraph: { title, description: game.description, url: `/games/${game.slug}` },
-    twitter: { card: 'summary_large_image', title, description: game.description },
+    title,
+    description: `${game.tagline} ${game.roundLabel}, free, no sign-up, no sound. Ends on one score you can share.`,
+    alternates: { canonical: `/games/${slug}` },
+    openGraph: { title, description: game.tagline, images: [image], url: `/games/${slug}`, siteName: 'I Need a Distraction', type: 'website' },
+    twitter: { card: 'summary_large_image', title, description: game.tagline, images: [image] },
   };
 }
 
-export default async function GamePage({ params }: { params: Promise<{ slug: string }> }) {
-  const game = getGame((await params).slug);
+export default async function GamePage({ params, searchParams }: { params: Params; searchParams: Search }) {
+  const { slug } = await params;
+  const arcade = getGame(slug);
+  if (arcade) {
+    const jsonLd = {
+      '@context': 'https://schema.org', '@type': 'VideoGame', name: arcade.title, description: arcade.description,
+      url: `https://www.ineedadistraction.com/games/${arcade.slug}`, genre: arcade.tags, gamePlatform: 'Web browser', isAccessibleForFree: true,
+    };
+    return (
+      <>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }} />
+        <GameClient slug={arcade.slug} />
+      </>
+    );
+  }
+  const game = getBreakGame(slug);
   if (!game) notFound();
-  const jsonLd = {
-    '@context': 'https://schema.org', '@type': 'VideoGame', name: game.title, description: game.description,
-    url: `https://www.ineedadistraction.com/games/${game.slug}`, genre: game.tags, gamePlatform: 'Web browser',
-    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  const friendScore = parseScore(game.unit, (await searchParams).score);
+  const structured = {
+    '@context': 'https://schema.org', '@type': 'VideoGame', name: game.name, description: game.description,
+    url: `https://www.ineedadistraction.com/games/${slug}`, gamePlatform: 'Web browser', applicationCategory: 'Game', isAccessibleForFree: true,
   };
   return (
-    <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <GameClient slug={game.slug} />
-    </>
+    <PageShell>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structured).replace(/</g, '\\u003c') }} />
+      <header className="bb-page-head">
+        <p className="magic-eyebrow"><span /> {game.roundLabel.toUpperCase()} · SCORED IN {game.scoreLabel.toUpperCase()}</p>
+        <h1><span aria-hidden="true">{game.emoji}</span> {game.name}</h1>
+        <p className="bb-lede">{game.tagline}</p>
+      </header>
+      <GamePlayer slug={slug} name={game.name} initialSeed={hashString(`${slug}:${utcDate()}`)} unit={game.unit} friendScore={friendScore} />
+      <section className="bb-prose" aria-labelledby="about-title">
+        <h2 id="about-title">About {game.name}</h2>
+        <p>{game.description}</p>
+        <h3>How to play</h3>
+        <ol>{game.howTo.map((step) => <li key={step}>{step}</li>)}</ol>
+        <h3>Your score</h3>
+        <p>{game.better === 'higher' ? 'Higher is better.' : 'Lower is better.'} Scores are measured in {game.scoreLabel} and stay in your browser. Share one and your friend lands on this page with your number to beat.</p>
+        <h3>In a classroom or a meeting</h3>
+        <p>{game.classroom} Everything is silent and works on a projector. See <a href="/brain-break-games">brain break games</a> and <a href="/games-to-play-at-work">games to play at work</a>.</p>
+      </section>
+      <section className="bb-section" aria-labelledby="more-title">
+        <h2 id="more-title" className="bb-h2">More tiny games</h2>
+        <GameCards games={BREAK_GAMES.filter((g) => g.slug !== slug)} />
+      </section>
+    </PageShell>
   );
 }

@@ -19,6 +19,10 @@ curl -s -H "X-API-Key: $API_KEY" "https://data-dive-sean-tarzys-projects.vercel.
 
 ## Site-specific gotchas
 
+- Home is the "Distract me" break button (`app/components/BreakButton.tsx`). Break games live in `app/lib/breakGames.ts`; the daily is pure date math in `app/lib/daily.ts`. Keep both deterministic and free of network/AI calls.
+- Game iframes are `sandbox="allow-scripts"` only: no `<form>` submit, no storage, no sound in game documents.
+- Launch kits go in `docs/launch/` as drafts. Never post anything.
+
 - Auth is via Clerk (`@clerk/nextjs`)
 - AI game generation via Anthropic API in `/api/create`
 - Heavy interaction tracking on `WidgetCard` (play, vote, share, remix), `CreateModal` (template selection), `template/[id]/page.tsx` (remix generation, publish)

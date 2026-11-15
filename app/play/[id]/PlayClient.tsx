@@ -279,6 +279,16 @@ function PlayPageInner({ id, initialWidget }: { id: string; initialWidget: Widge
         )}
       </div>
 
+      {/* Every player-made game points home: one link per shared game. */}
+      {widget.type === 'user-created' && (
+        <footer className="made-on shrink-0">
+          <a href={`/make-a-game?ref=${encodeURIComponent(widget.id)}`} onClick={() => trackEvent('cta_click', { cta_text: 'Made on I Need a Distraction', cta_location: 'play_footer', cta_destination: '/make-a-game' })}>
+            <span aria-hidden="true">✳</span> Made on I Need a Distraction · <strong>make your own in 2 minutes ↗</strong>
+          </a>
+          {canRemix && !isAuthor && <a className="made-on-remix" href={remixHref} onClick={() => trackEvent('cta_click', { cta_text: 'Remix this', cta_location: 'play_footer' })}>Remix this ✧</a>}
+        </footer>
+      )}
+
       {/* Report modal */}
       {reportState !== 'idle' && (
         <div

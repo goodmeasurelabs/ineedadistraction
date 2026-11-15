@@ -21,15 +21,15 @@ const arcadeFont = VT323({
 });
 
 const SITE_DESCRIPTION =
-  "Tiny games for a better break. Play instantly, try a surprising twist, and make your own mini-game with AI.";
+  "The break button: one press gives you a tiny game, about 2 minutes, that ends on a score you can share. Plus a daily challenge. Free, no sign-up, no sound.";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.ineedadistraction.com"),
-  title: "I Need a Distraction — tiny games, happy accidents",
+  title: "I Need a Distraction — the break button for tiny games",
   description: SITE_DESCRIPTION,
   // opengraph-image.tsx at the app root is auto-wired as the default og/twitter image.
   openGraph: {
-    title: "I Need a Distraction — tiny games, happy accidents",
+    title: "I Need a Distraction — the break button for tiny games",
     description: SITE_DESCRIPTION,
     url: "https://www.ineedadistraction.com",
     siteName: "I Need a Distraction",
@@ -37,7 +37,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "I Need a Distraction — tiny games, happy accidents",
+    title: "I Need a Distraction — the break button for tiny games",
     description: SITE_DESCRIPTION,
   },
 };

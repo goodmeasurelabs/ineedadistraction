@@ -1,0 +1,634 @@
+{
+  "deployment": "dpl_7SitM9swRG2QFtuAbJy4mpuRS8oa",
+  "url": "https://ineedadistraction-l9clkv2r6-sean-tarzys-projects.vercel.app",
+  "reportedCommit": "47d7fdbf0168a45412fd1a07c68be24df5aa8ec8",
+  "source": "Vercel CLI preserved file tree and authenticated file API; complete base64 payloads decoded and SHA-1 checked",
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "sha1": "4ccb6619caedcfdababa0ac7e7869c6ec72a5295",
+      "method": "matching-main",
+      "bytes": 1301
+    },
+    {
+      "path": "CLAUDE.md",
+      "sha1": "ad6e958ca59a7053b18d555a645921132d8972e8",
+      "method": "matching-main",
+      "bytes": 1302
+    },
+    {
+      "path": "README.md",
+      "sha1": "1dbed877dd2b760189c6a541567ded3505f1df97",
+      "method": "matching-main",
+      "bytes": 1815
+    },
+    {
+      "path": "app/api/auth/confirm/route.ts",
+      "sha1": "b8d2ae5b87c680f2684082347c7a925b741a0651",
+      "method": "authenticated-deployment-file",
+      "bytes": 1275
+    },
+    {
+      "path": "app/api/auth/request/route.ts",
+      "sha1": "d921fddf88d1bb89712333ec3f29c7cb19e71b2a",
+      "method": "authenticated-deployment-file",
+      "bytes": 283
+    },
+    {
+      "path": "app/api/challenge-card/route.tsx",
+      "sha1": "f2413e6c002cd2cd448f91b429f1f70debef90d5",
+      "method": "authenticated-deployment-file",
+      "bytes": 1191
+    },
+    {
+      "path": "app/api/chat/route.ts",
+      "sha1": "a3b776227b921d82cebe3263212d7b2699784d31",
+      "method": "authenticated-deployment-file",
+      "bytes": 9083
+    },
+    {
+      "path": "app/api/claim/route.ts",
+      "sha1": "cbf5ac848b48b65c615e30a236ed48ff68dca5dd",
+      "method": "matching-main",
+      "bytes": 617
+    },
+    {
+      "path": "app/api/connections/check-category/route.ts",
+      "sha1": "4d13a93fcfe8f645e4a3eeefe367424185cb4f11",
+      "method": "matching-main",
+      "bytes": 1396
+    },
+    {
+      "path": "app/api/connections/check-grouping/route.ts",
+      "sha1": "25f544093b4a7101b32843e0c71363f9e3c546df",
+      "method": "matching-main",
+      "bytes": 1788
+    },
+    {
+      "path": "app/api/connections/today/route.ts",
+      "sha1": "503b9a75ffd47d8964a66ee15d6abddf4adcee9f",
+      "method": "matching-main",
+      "bytes": 1262
+    },
+    {
+      "path": "app/api/create/route.ts",
+      "sha1": "8db576a8ed2e6bc7c479a1af237cf144fe3dba04",
+      "method": "authenticated-deployment-file",
+      "bytes": 18674
+    },
+    {
+      "path": "app/api/create/step/route.ts",
+      "sha1": "5242d9f8b06b614c758882a37a7bc8905c542045",
+      "method": "authenticated-deployment-file",
+      "bytes": 10275
+    },
+    {
+      "path": "app/api/cron/generate-daily-puzzle/route.ts",
+      "sha1": "1ffc1e4e59bd8814e71ef8237aebf36ef80265bc",
+      "method": "matching-main",
+      "bytes": 4929
+    },
+    {
+      "path": "app/api/drafts/[id]/messages/route.ts",
+      "sha1": "f76a09c35e798cb857a2f5b373ac3eebb0cc39a0",
+      "method": "matching-main",
+      "bytes": 1494
+    },
+    {
+      "path": "app/api/drafts/[id]/route.ts",
+      "sha1": "c0bc59bbc72090f8bcd5249233554d88917b7238",
+      "method": "authenticated-deployment-file",
+      "bytes": 2271
+    },
+    {
+      "path": "app/api/drafts/[id]/snapshots/route.ts",
+      "sha1": "57c2014cb365578a992990bb3376682eeee6b7de",
+      "method": "matching-main",
+      "bytes": 1074
+    },
+    {
+      "path": "app/api/drafts/route.ts",
+      "sha1": "86746310507696a6cf1b915ca34cb526aa58d6c3",
+      "method": "authenticated-deployment-file",
+      "bytes": 1817
+    },
+    {
+      "path": "app/api/snapshots/[id]/route.ts",
+      "sha1": "d1bf676283f6790c6a33c09cd55f47b9971904e9",
+      "method": "matching-main",
+      "bytes": 934
+    },
+    {
+      "path": "app/api/widgets/[id]/report/route.ts",
+      "sha1": "b8956e0a23dd92102d4dcf5951571ee2f6c37ca3",
+      "method": "matching-main",
+      "bytes": 1741
+    },
+    {
+      "path": "app/api/widgets/[id]/route.ts",
+      "sha1": "68b037cc070cf6864c093e3429731ecd4364695e",
+      "method": "authenticated-deployment-file",
+      "bytes": 2641
+    },
+    {
+      "path": "app/api/widgets/[id]/view/route.ts",
+      "sha1": "b84e99777429170d1a37f3b76860ff430027eef4",
+      "method": "matching-main",
+      "bytes": 411
+    },
+    {
+      "path": "app/api/widgets/[id]/vote/route.ts",
+      "sha1": "89b74f0fe05101e4b88cd0f31453f2aef90736e1",
+      "method": "matching-main",
+      "bytes": 1352
+    },
+    {
+      "path": "app/api/widgets/route.ts",
+      "sha1": "0eb11c3e4733162dc540f82211644499aa63498c",
+      "method": "authenticated-deployment-file",
+      "bytes": 2757
+    },
+    {
+      "path": "app/auth/confirm/page.tsx",
+      "sha1": "5e1e03f723965f8d441ce2efc8921a9d4f321c89",
+      "method": "matching-main",
+      "bytes": 1007
+    },
+    {
+      "path": "app/auth/layout.tsx",
+      "sha1": "c1a19ae13fda1d9091a51bab53beb3fbc8ebb69c",
+      "method": "authenticated-deployment-file",
+      "bytes": 213
+    },
+    {
+      "path": "app/sign-in/layout.tsx",
+      "sha1": "c1a19ae13fda1d9091a51bab53beb3fbc8ebb69c",
+      "method": "authenticated-deployment-file",
+      "bytes": 213
+    },
+    {
+      "path": "app/sign-in/[[...sign-in]]/page.tsx",
+      "sha1": "362be2b2f140d5962095a126e810d86fb4374606",
+      "method": "authenticated-deployment-file",
+      "bytes": 1677
+    },
+    {
+      "path": "app/sign-up/layout.tsx",
+      "sha1": "c1a19ae13fda1d9091a51bab53beb3fbc8ebb69c",
+      "method": "authenticated-deployment-file",
+      "bytes": 213
+    },
+    {
+      "path": "app/sign-up/[[...sign-up]]/page.tsx",
+      "sha1": "bfbbc53cec6c650d5ef1a31acf84cc2d750473e8",
+      "method": "matching-main",
+      "bytes": 1682
+    },
+    {
+      "path": "app/components/AutoClaim.tsx",
+      "sha1": "d743b216c43481ddaca8d60a6e17f9ce142fb810",
+      "method": "matching-main",
+      "bytes": 247
+    },
+    {
+      "path": "app/components/BrainTeaser.tsx",
+      "sha1": "d42068246b65444d97333c1efddb6dd046d96abe",
+      "method": "matching-main",
+      "bytes": 6950
+    },
+    {
+      "path": "app/components/CreateModal.tsx",
+      "sha1": "5afabacecf099b34337d9958623e715a94d62e60",
+      "method": "authenticated-deployment-file",
+      "bytes": 1568
+    },
+    {
+      "path": "app/components/DataDiveFeedback.tsx",
+      "sha1": "73d39a7fca9354789279ad9d59833094e2fe6603",
+      "method": "matching-main",
+      "bytes": 16001
+    },
+    {
+      "path": "app/components/FactGenerator.tsx",
+      "sha1": "acb3c063108a3736c8115d66f9fb1067335f98e9",
+      "method": "matching-main",
+      "bytes": 6726
+    },
+    {
+      "path": "app/components/MagicArcade.tsx",
+      "sha1": "0da193bffb36a3706fcf92960a3c0e786e8fe784",
+      "method": "authenticated-deployment-file",
+      "bytes": 11145
+    },
+    {
+      "path": "app/components/MemoryGame.tsx",
+      "sha1": "0fe853407379094d632670636931d913f0d1ce63",
+      "method": "matching-main",
+      "bytes": 6177
+    },
+    {
+      "path": "app/components/WidgetCard.tsx",
+      "sha1": "7b1e08ceda1137113577ad5071b9a2ff173b5e33",
+      "method": "authenticated-deployment-file",
+      "bytes": 4626
+    },
+    {
+      "path": "app/connections/ConnectionsClient.tsx",
+      "sha1": "c596673be63bbbc654c8287cae25d4cc5361760e",
+      "method": "matching-main",
+      "bytes": 16311
+    },
+    {
+      "path": "app/connections/page.tsx",
+      "sha1": "e588e2bfbfc66d62e75cf3093fd31de2e3080dfd",
+      "method": "matching-main",
+      "bytes": 1007
+    },
+    {
+      "path": "app/dashboard/DashboardClient.tsx",
+      "sha1": "4f92151711d59adae33a47caf011d1c05c6da9d8",
+      "method": "authenticated-deployment-file",
+      "bytes": 21253
+    },
+    {
+      "path": "app/dashboard/page.tsx",
+      "sha1": "cb9f53bc1a18a0727db196b191604df987db1054",
+      "method": "authenticated-deployment-file",
+      "bytes": 1256
+    },
+    {
+      "path": "app/globals.css",
+      "sha1": "4ecdafd1bdda18f3cbc7e8b15a574046064b6139",
+      "method": "authenticated-deployment-file",
+      "bytes": 23274
+    },
+    {
+      "path": "app/icon.svg",
+      "sha1": "548054a9235b26c037f97212cff9f0f973a8757d",
+      "method": "matching-main",
+      "bytes": 816
+    },
+    {
+      "path": "app/layout.tsx",
+      "sha1": "0d8122d959ed2e6f533ee842eab9f93ad8788507",
+      "method": "authenticated-deployment-file",
+      "bytes": 2317
+    },
+    {
+      "path": "app/lib/analytics.ts",
+      "sha1": "700be44f12daeb0e3ec987786e34a96aea8da21a",
+      "method": "matching-main",
+      "bytes": 1905
+    },
+    {
+      "path": "app/lib/astra.ts",
+      "sha1": "36ad03c7e6f48e371a4cc53f27035943752e3b50",
+      "method": "authenticated-deployment-file",
+      "bytes": 2886
+    },
+    {
+      "path": "app/lib/authStore.ts",
+      "sha1": "4efec5b0113c6e9ffa1b2d9290a42599265b4934",
+      "method": "matching-main",
+      "bytes": 1254
+    },
+    {
+      "path": "app/lib/clientId.ts",
+      "sha1": "e382a61555588c7a28fc5c284d8b7943800acd19",
+      "method": "authenticated-deployment-file",
+      "bytes": 1512
+    },
+    {
+      "path": "app/lib/connections.ts",
+      "sha1": "877a5e4a6e5ca4eeeed6bb25f770b26688e40b98",
+      "method": "matching-main",
+      "bytes": 5948
+    },
+    {
+      "path": "app/lib/drafts.ts",
+      "sha1": "e0fb3010d2ad936a0112c9283d6a89335ecf2f21",
+      "method": "matching-main",
+      "bytes": 2816
+    },
+    {
+      "path": "app/lib/htmlCompact.ts",
+      "sha1": "f6c815ac83429a57bb1c1c12c4738511d76e16b2",
+      "method": "matching-main",
+      "bytes": 3339
+    },
+    {
+      "path": "app/lib/messages.ts",
+      "sha1": "901ef45ca060ec15aba4541ec742be199abed9be",
+      "method": "matching-main",
+      "bytes": 2002
+    },
+    {
+      "path": "app/lib/orbitPop.ts",
+      "sha1": "194e16ef64ae97548159f4f274f107ca056c638e",
+      "method": "authenticated-deployment-file",
+      "bytes": 11148
+    },
+    {
+      "path": "app/lib/owner.ts",
+      "sha1": "f4e9f11c8b224f45c64e600f73c4d753b216cf49",
+      "method": "matching-main",
+      "bytes": 501
+    },
+    {
+      "path": "app/lib/prisma.ts",
+      "sha1": "fabd2dec6b72023e55d3c766c6dccf7dc5417208",
+      "method": "matching-main",
+      "bytes": 307
+    },
+    {
+      "path": "app/lib/publishValidation.ts",
+      "sha1": "cb686630ffa7fba6852b35d9fc6c381ba4400c75",
+      "method": "authenticated-deployment-file",
+      "bytes": 849
+    },
+    {
+      "path": "app/lib/rateLimit.ts",
+      "sha1": "263484c68c072f864fb94de2eaebff0d3ff27ab0",
+      "method": "authenticated-deployment-file",
+      "bytes": 3541
+    },
+    {
+      "path": "app/lib/snapshots.ts",
+      "sha1": "b51d62190e7dfffb39d17025a78f7efde4f0f53c",
+      "method": "matching-main",
+      "bytes": 836
+    },
+    {
+      "path": "app/lib/store.ts",
+      "sha1": "21a2fe0c964b657943c61de3722ac76f4c0c3a1d",
+      "method": "authenticated-deployment-file",
+      "bytes": 12059
+    },
+    {
+      "path": "app/lib/templates.ts",
+      "sha1": "2bbe6862949f2d1eb6c892c37d333c4d63e0ba7e",
+      "method": "authenticated-deployment-file",
+      "bytes": 46252
+    },
+    {
+      "path": "app/lib/useAutoClaim.ts",
+      "sha1": "d62282e717404869a57438e40fd45becee218131",
+      "method": "matching-main",
+      "bytes": 1059
+    },
+    {
+      "path": "app/make-a-game/page.tsx",
+      "sha1": "6eb0a9b187a6ce3925a0b845f9f52c0808943f59",
+      "method": "authenticated-deployment-file",
+      "bytes": 3082
+    },
+    {
+      "path": "app/opengraph-image.tsx",
+      "sha1": "a7f8480fb86e9329aa613f00780d78e469c5cc46",
+      "method": "authenticated-deployment-file",
+      "bytes": 2745
+    },
+    {
+      "path": "app/page.tsx",
+      "sha1": "722a661196e53496349c5fdee291f00e8734b0bc",
+      "method": "authenticated-deployment-file",
+      "bytes": 102
+    },
+    {
+      "path": "app/play/[id]/PlayClient.tsx",
+      "sha1": "6e5998d3656b9f1354e1a429f035681fe08551a3",
+      "method": "authenticated-deployment-file",
+      "bytes": 15066
+    },
+    {
+      "path": "app/play/[id]/opengraph-image.tsx",
+      "sha1": "6db4102b25d0792fa4667862ede5f1a89b165f22",
+      "method": "matching-main",
+      "bytes": 4855
+    },
+    {
+      "path": "app/play/[id]/page.tsx",
+      "sha1": "2dc301e0698b0664d244e0075116cce59a30fbc3",
+      "method": "authenticated-deployment-file",
+      "bytes": 2694
+    },
+    {
+      "path": "app/privacy/page.tsx",
+      "sha1": "3708365fb412d0c7fe41972c69cdb7f18409df27",
+      "method": "matching-main",
+      "bytes": 5168
+    },
+    {
+      "path": "app/robots.ts",
+      "sha1": "f8a5b50a97cd30c919e67fbc173ca0bc290a482e",
+      "method": "authenticated-deployment-file",
+      "bytes": 233
+    },
+    {
+      "path": "app/sitemap.ts",
+      "sha1": "d9d17c0ce3b657e438a813cfe33f0c9f0757cf9f",
+      "method": "authenticated-deployment-file",
+      "bytes": 533
+    },
+    {
+      "path": "app/template/[id]/page.tsx",
+      "sha1": "d91f28ba6a2afda18e2d0f964342824cd7522787",
+      "method": "authenticated-deployment-file",
+      "bytes": 58051
+    },
+    {
+      "path": "app/template/layout.tsx",
+      "sha1": "d631d4c54cd8d417253db73d4fc2f6d7ca87fb1b",
+      "method": "authenticated-deployment-file",
+      "bytes": 262
+    },
+    {
+      "path": "app/terms/page.tsx",
+      "sha1": "4e245dbf70cc37d9c48ede55d84087f771387594",
+      "method": "matching-main",
+      "bytes": 4838
+    },
+    {
+      "path": "docs/BRAIN_GAME_TOOLING_PLAN.md",
+      "sha1": "2704dc310c3efa354227af11afd04f9cdef2b3d5",
+      "method": "matching-main",
+      "bytes": 4412
+    },
+    {
+      "path": "docs/V1_PRODUCT_EXECUTION_BRIEF.md",
+      "sha1": "17c5b10aa1b3215a61e07319f87698d48b4f43b1",
+      "method": "matching-main",
+      "bytes": 9065
+    },
+    {
+      "path": "docs/game-generation-eval.json",
+      "sha1": "665e4a7ab75e2e09c7b7d78f79bf5cf7d0a947b7",
+      "method": "authenticated-deployment-file",
+      "bytes": 3129
+    },
+    {
+      "path": "docs/launch-and-growth-2026-09-22.md",
+      "sha1": "4cbddbb7d9b300451940a2c81dfd5fe29823bb67",
+      "method": "authenticated-deployment-file",
+      "bytes": 8919
+    },
+    {
+      "path": "docs/revitalization-research-2026-09-22.md",
+      "sha1": "3cee7bf6bd012c32724e728ac0c75ff385496b12",
+      "method": "authenticated-deployment-file",
+      "bytes": 13326
+    },
+    {
+      "path": "next-env.d.ts",
+      "sha1": "9bfff799abb9a4d30186f7a8b68f91ac35157611",
+      "method": "authenticated-deployment-file",
+      "bytes": 247
+    },
+    {
+      "path": "package-lock.json",
+      "sha1": "a8c8aafc2717562e56bf87bf6449e299b1004235",
+      "method": "matching-main",
+      "bytes": 98482
+    },
+    {
+      "path": "package.json",
+      "sha1": "3f635118095b8384df14587e50ee21f8cdd3b863",
+      "method": "authenticated-deployment-file",
+      "bytes": 1183
+    },
+    {
+      "path": "postcss.config.mjs",
+      "sha1": "53c9c46f45ec45dede8a1e28675d7c47e33b04f1",
+      "method": "matching-main",
+      "bytes": 146
+    },
+    {
+      "path": "prisma/migrations/20260408100918_init/migration.sql",
+      "sha1": "32a177aff78ecf2eb0e52a72009a45ec44bdacef",
+      "method": "matching-main",
+      "bytes": 1994
+    },
+    {
+      "path": "prisma/migrations/20260422225918_draft_guests_and_messages/migration.sql",
+      "sha1": "4a7fe0f788b1faf5d96b604d6029c3b14f18ea83",
+      "method": "matching-main",
+      "bytes": 754
+    },
+    {
+      "path": "prisma/migrations/20260425170407_add_snapshots/migration.sql",
+      "sha1": "42f05277704de7466fa0e64c25ee90eea97db2ad",
+      "method": "matching-main",
+      "bytes": 534
+    },
+    {
+      "path": "prisma/migrations/20260426135008_add_waitlist/migration.sql",
+      "sha1": "f062a657b8f43c2f6172901411f22077a844e9b7",
+      "method": "matching-main",
+      "bytes": 393
+    },
+    {
+      "path": "prisma/migrations/20260503015411_add_daily_puzzle/migration.sql",
+      "sha1": "09de7be84688a4cd0c3dd7c072d4fc6aeac7b2c8",
+      "method": "matching-main",
+      "bytes": 412
+    },
+    {
+      "path": "prisma/migrations/20260503162707_add_widget_published/migration.sql",
+      "sha1": "962e9bbb790e5b390ae79d484092f421528ea647",
+      "method": "matching-main",
+      "bytes": 171
+    },
+    {
+      "path": "prisma/migrations/20260503180500_add_widget_views_and_parent/migration.sql",
+      "sha1": "7405614cc5670f6651b6b316a356fc065d34ff88",
+      "method": "matching-main",
+      "bytes": 370
+    },
+    {
+      "path": "prisma/migrations/20260802220450_add_rate_limit/migration.sql",
+      "sha1": "80c9fa8cac1e8c98e78b1d3163f034693ceaed85",
+      "method": "matching-main",
+      "bytes": 280
+    },
+    {
+      "path": "prisma/migrations/20260802221534_add_report/migration.sql",
+      "sha1": "8561d5e37bcc4a8f1a278a6568712d9b2aea8069",
+      "method": "matching-main",
+      "bytes": 413
+    },
+    {
+      "path": "prisma/migrations/migration_lock.toml",
+      "sha1": "7abbf1b5bc2ed90d381336ef493ef3a44c488e3d",
+      "method": "matching-main",
+      "bytes": 128
+    },
+    {
+      "path": "prisma/schema.prisma",
+      "sha1": "695bf21c3d94ffd88cafd6ec4d79d77da9e950f8",
+      "method": "matching-main",
+      "bytes": 4705
+    },
+    {
+      "path": "prisma/seed.ts",
+      "sha1": "5f6786d5ce81b03355b175923e1eb47b14fef226",
+      "method": "matching-main",
+      "bytes": 2414
+    },
+    {
+      "path": "proxy.ts",
+      "sha1": "368012d6f9940ad8519875352254c15f37cff03b",
+      "method": "matching-main",
+      "bytes": 330
+    },
+    {
+      "path": "scripts/launch-smoke.mjs",
+      "sha1": "f1232cca83dc279aeed6e2a695707bd16d7f8d96",
+      "method": "authenticated-deployment-file",
+      "bytes": 2896
+    },
+    {
+      "path": "tailwind.config.ts",
+      "sha1": "f56bbbfac6c1a190056c2601ef209b348464d926",
+      "method": "matching-main",
+      "bytes": 528
+    },
+    {
+      "path": "tests/astra.test.ts",
+      "sha1": "6b4ef5cd11c366890c3610c2b7136467e551c2aa",
+      "method": "authenticated-deployment-file",
+      "bytes": 4149
+    },
+    {
+      "path": "tests/publishValidation.test.ts",
+      "sha1": "46babac59b2dacb95a182d5958284bb47f803f12",
+      "method": "authenticated-deployment-file",
+      "bytes": 901
+    },
+    {
+      "path": "tsconfig.json",
+      "sha1": "b950a0192d5f43be84c3c6f610aa7a894e5548fd",
+      "method": "matching-main",
+      "bytes": 698
+    },
+    {
+      "path": "vercel.json",
+      "sha1": "29d1a0fab7660932d5e9682c6ef2ae0d7cd41ebd",
+      "method": "matching-main",
+      "bytes": 166
+    }
+  ],
+  "excluded": [
+    ".claude/settings.local.json",
+    "generated tmp/output artifacts",
+    "tsconfig.tsbuildinfo"
+  ],
+  "intentionalDelta": [
+    "MagicArcade create-title heading h3 to h2",
+    "matching two CSS selectors h3 to h2"
+  ],
+  "validationBoundaries": [
+    "No migration run",
+    "No credentials or environment values retrieved",
+    "No paid/authenticated actions invoked"
+  ]
+}
