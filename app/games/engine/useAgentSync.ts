@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 // Agent Mode on the page side: once this browser is paired with a coding agent
 // (Codex / Claude Code plugin), long-poll the agent's state so the stage can
@@ -46,6 +46,29 @@ export async function requestTerminalFocus(): Promise<boolean> {
     });
     return response.ok;
   } catch { return false; }
+}
+
+// The "Back to your agent" button: sends the request and owns the small status
+// line under it. When the switch works this window loses focus within a second
+// or so, so the "do it yourself" fallback only appears if we are still in
+// front several seconds later, and any note is dropped once focus leaves.
+export function useReturnToAgent(): { note: string; back: () => Promise<void>; clear: () => void } {
+  const [note, setNote] = useState('');
+  const timer = useRef(0);
+  const clear = useCallback(() => { window.clearTimeout(timer.current); setNote(''); }, []);
+  useEffect(() => {
+    window.addEventListener('blur', clear);
+    return () => { window.removeEventListener('blur', clear); window.clearTimeout(timer.current); };
+  }, [clear]);
+  const back = useCallback(async () => {
+    window.clearTimeout(timer.current);
+    setNote('Bringing your terminal forward…');
+    if (!(await requestTerminalFocus())) { setNote('Could not reach the plugin. Switch to your terminal yourself.'); return; }
+    timer.current = window.setTimeout(() => {
+      setNote(document.hasFocus() ? 'Still here? Switch to your terminal yourself. This button needs the latest plugin, on a Mac.' : '');
+    }, 5000);
+  }, []);
+  return { note, back, clear };
 }
 
 export function useAgentSync(): AgentSync {
