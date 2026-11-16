@@ -5,7 +5,7 @@ import Link from 'next/link';
 import type { Game, GameHost, GameModule, RunResult } from './types';
 import { Sfx } from './sfx';
 import { hashString } from './fx';
-import { readAgentToken, useAgentSync } from './useAgentSync';
+import { readAgentToken, requestTerminalFocus, useAgentSync } from './useAgentSync';
 import { trackEvent, trackShareClick } from '../../lib/analytics';
 
 type OtherGame = { slug: string; title: string; emoji: string };
@@ -67,6 +67,7 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
   const [status, setStatus] = useState('');
   const [pause, setPauseState] = useState<PauseCause>(null);
   const [countdown, setCountdown] = useState(0);
+  const [returnNote, setReturnNote] = useState('');
   const [result, setResult] = useState<(RunResult & { newBest: boolean; previousBest: number }) | null>(null);
   const [mode, setMode] = useState<Mode>('endless');
   const [muted, setMuted] = useState(false);
@@ -355,6 +356,9 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
     }
   }, [agent.state, agent.seq, agent.waitedAt, agent.paired, setPause]);
 
+  // The note under "Back to your agent" belongs to one wait; drop it afterwards.
+  useEffect(() => { if (agent.state !== 'waiting') setReturnNote(''); }, [agent.state]);
+
   // Tab title carries the agent's status, so it is visible from another window.
   const needsYou = agent.paired && agent.state === 'waiting';
   useEffect(() => {
@@ -394,6 +398,12 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
   }
 
   const agentName = AGENT_NAMES[agent.agent ?? ''] ?? 'Your agent';
+  async function backToAgent() {
+    setReturnNote('Bringing your terminal forward…');
+    trackEvent('agent_return_click', { game_id: slug });
+    const sent = await requestTerminalFocus();
+    setReturnNote(sent ? 'Nothing happened? Switch to your terminal yourself. This button needs the latest plugin, on a Mac.' : 'Could not reach the plugin. Switch to your terminal yourself.');
+  }
   const agentLine = agent.reason === 'permission' ? `${agentName} is asking for permission.`
     : agent.reason === 'question' ? `${agentName} has a question for you.`
     : `${agentName} finished its turn.`;
@@ -431,6 +441,7 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
           <i aria-hidden="true" />
           {agent.state === 'working' && <span>{several ? `${agent.working} agents working` : `${agentName} is working`} <b>{formatClock(now - agent.since)}</b>. Play on.</span>}
           {agent.state === 'waiting' && <span>{agentLine}{several ? crowd : ' It is waiting on you.'}</span>}
+          {agent.state === 'waiting' && <button className="agent-return" onClick={backToAgent}>Back to {agentName}</button>}
           {agent.state === 'idle' && <span>{agentName} is idle. Play on your own time.</span>}
           {agent.state === 'unpaired' && <span>Paired. Waiting for your agent&rsquo;s first signal.</span>}
         </div>
@@ -447,6 +458,8 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
             <p className="overlay-eyebrow">GAME PAUSED · PROGRESS SAVED</p>
             <h2>{agentLine}</h2>
             <p>Go answer it. This run will be right here when it gets back to work.{agent.state === 'waiting' && others ? crowd : ''}</p>
+            {agent.state === 'waiting' && <button className="overlay-primary" autoFocus onClick={backToAgent}>Back to {agentName}</button>}
+            {returnNote && <p className="overlay-note" role="status">{returnNote}</p>}
             <button className="overlay-ghost" onClick={() => setPause(null, true)}>Keep playing anyway</button>
           </div>
         )}

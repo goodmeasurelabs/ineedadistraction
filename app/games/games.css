@@ -39,6 +39,9 @@
 }
 .agent-bar i { width: 8px; height: 8px; border-radius: 50%; background: #5d6966; flex: none; }
 .agent-bar b { font-variant-numeric: tabular-nums; color: var(--ink); }
+.agent-return { margin-left: auto; flex: none; padding: 4px 11px; border-radius: 99px; background: #ffb020 !important; color: #1a1203 !important; font-size: 12px; font-weight: 700; }
+.agent-return:hover { filter: brightness(1.1); }
+.overlay-note { margin-top: 10px; font-size: 12px; opacity: .8; }
 .agent-working i { background: #6dffa8; box-shadow: 0 0 0 0 #6dffa8aa; animation: agent-pulse 1.6s ease-out infinite; }
 .agent-waiting { background: #2a1d07; color: #ffd98a; }
 .agent-waiting i { background: #ffb020; }

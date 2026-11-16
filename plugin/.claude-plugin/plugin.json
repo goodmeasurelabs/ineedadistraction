@@ -1,7 +1,7 @@
 {
   "name": "distraction",
   "displayName": "I Need a Distraction",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Play a game from ineedadistraction.com while your coding agent works. It pauses the moment the agent finishes or needs you.",
   "author": {
     "name": "Good Measure Labs",
