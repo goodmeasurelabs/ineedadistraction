@@ -5,7 +5,7 @@ import Link from 'next/link';
 import type { Game, GameHost, GameModule, RunResult } from './types';
 import { Sfx } from './sfx';
 import { hashString } from './fx';
-import { useAgentSync } from './useAgentSync';
+import { readAgentToken, useAgentSync } from './useAgentSync';
 import { trackEvent, trackShareClick } from '../../lib/analytics';
 
 type OtherGame = { slug: string; title: string; emoji: string };
@@ -145,6 +145,11 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
       }
     } catch { savedState = null; }
 
+    // Whether this browser is paired with the coding-agent plugin.
+    const agentMode = readAgentToken() !== null;
+    let reportedT = 0;
+    function playedSinceReport() { const played = Math.round(state.t - reportedT); reportedT = state.t; return played; }
+
     const host: GameHost = {
       get w() { return state.w; },
       get h() { return state.h; },
@@ -166,7 +171,7 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
         store.set(`inad:runs:${slug}`, String((Number(store.get(`inad:runs:${slug}`)) || 0) + 1));
         setResult({ ...run, score: finalScore, newBest: newBest && finalScore > 0, previousBest: state.best });
         if (newBest) state.best = finalScore;
-        trackEvent('game_complete', { game_id: slug, score: finalScore, mode, duration_s: Math.round((performance.now() - state.started) / 1000) });
+        trackEvent('game_complete', { game_id: slug, score: finalScore, mode, duration_s: Math.round((performance.now() - state.started) / 1000), play_s: playedSinceReport(), new_best: newBest && finalScore > 0, agent_mode: agentMode });
       },
       shake(pixels) { if (!state.reducedMotion) state.shake = Math.max(state.shake, pixels); },
       hitStop(ms) { state.freezeUntil = Math.max(state.freezeUntil, performance.now() + Math.min(ms, 220)); },
@@ -183,7 +188,19 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
     gameRef.current = game;
     if (savedState !== null) setShowHint(false); // a resumed run needs no tutorial
     store.set('inad:last-game', slug);
-    trackEvent('game_start', { game_id: slug, mode, replay: runKey > 0, resumed: savedState !== null });
+    trackEvent('game_start', { game_id: slug, mode, replay: runKey > 0, resumed: savedState !== null, agent_mode: agentMode });
+
+    // Most runs of an endless game never reach a game over, so time played is
+    // reported when a run is left as well: on restart, mode switch, navigation
+    // or tab close. play_s is active seconds (state.t stops while paused) since
+    // the last report, so the two events add up to total play time per game.
+    function reportQuit() {
+      if (state.over) return;
+      const played = playedSinceReport();
+      if (played < 1) return;
+      trackEvent('game_quit', { game_id: slug, mode, score: state.score, play_s: played, agent_mode: agentMode });
+    }
+    window.addEventListener('pagehide', reportQuit);
 
     // ---- Frame loop ---------------------------------------------------------
     let raf = 0, last = performance.now(), lastCount = 0;
@@ -300,6 +317,8 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
     return () => {
       cancelAnimationFrame(raf);
       observer.disconnect();
+      window.removeEventListener('pagehide', reportQuit);
+      reportQuit();
       canvas.removeEventListener('pointerdown', onDown);
       canvas.removeEventListener('pointermove', onMove);
       canvas.removeEventListener('pointerup', onUp);
