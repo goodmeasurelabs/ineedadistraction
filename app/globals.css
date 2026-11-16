@@ -1277,3 +1277,17 @@ body {
 .bb-stage-bar:not(:has(.bb-result, .bb-stage-footer)) .bb-status:empty { min-height: 0; margin: 0; }
 .bb-landing-player + .bb-section, .bb-daily-player + .bb-prose { margin-top: 56px; }
 .distraction-main > .magic-create { border-bottom: 0; }
+
+/* Agent Mode status on every page (app/components/AgentBanner.tsx). */
+.agent-banner {
+  position: sticky; top: 0; z-index: 60; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 9px; padding: 7px 14px;
+  font: 500 12px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: #c9d3cf; background: #0d1418; border-bottom: 1px solid #ffffff14;
+}
+.agent-banner i { width: 8px; height: 8px; border-radius: 50%; flex: none; background: #6dffa8; }
+.agent-banner-waiting { background: #2a1d07; color: #ffd98a; padding-block: 10px; font-size: 13px; }
+.agent-banner-waiting i { background: #ffb020; }
+.agent-banner button {
+  margin-left: auto; flex: none; padding: 6px 14px; border: 0; border-radius: 99px; cursor: pointer;
+  background: #ffb020; color: #1a1203; font: inherit; font-weight: 700;
+}
+.agent-banner button:hover { filter: brightness(1.1); }
