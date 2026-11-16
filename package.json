@@ -9,6 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "postinstall": "prisma generate",
+    "stats": "node scripts/game-stats.mjs",
+    "ga:setup": "node scripts/ga-setup.mjs",
     "db:seed": "tsx prisma/seed.ts",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "dotenv -e .env.development.local -- prisma migrate dev",

@@ -10,6 +10,19 @@ API_KEY=$(grep API_KEY ~/Development/code/data-dive/.env.local | cut -d= -f2)
 curl -s -H "X-API-Key: $API_KEY" "https://data-dive-sean-tarzys-projects.vercel.app/api/status/ineedadistraction?period=7d"
 ```
 
+## Which games are doing well
+
+```bash
+npm run stats        # one row per game, last 7 days
+npm run stats -- 30  # last 30 days
+```
+
+Players, plays, replays, completions, quits, average score, minutes played and shares per game, straight from GA4 (`scripts/game-stats.mjs`). It uses the same service account as Data Dive.
+
+- Every game event carries `game_id`. Runs report `game_start`, then `game_complete` (game over) or `game_quit` (left mid-run); both carry `play_s`, the seconds actively played, so they add up to total play time. `agent_mode` is true when the browser is paired with the plugin.
+- GA4 only reports on event parameters that are registered as custom dimensions or metrics, and only from the day they were registered (2026-11-15 for the current set). When you add a parameter worth reporting on, add it to `scripts/ga-setup.mjs` and run `npm run ga:setup`.
+- To keep your own play out of the numbers, open the site once with `?notrack=1` in each browser you use, including the plugin's pop-up (it has its own browser profile). `?notrack=0` undoes it.
+
 ## Site facts
 
 - **GA4 property:** `properties/529426996` (measurement ID via `GOOGLE_MEASUREMENT_ID` env var — note: not `NEXT_PUBLIC_` prefixed)

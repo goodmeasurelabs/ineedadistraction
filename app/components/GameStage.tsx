@@ -30,6 +30,7 @@ export default function GameStage({ slug, seed, share, location, dailyNumber, on
   useEffect(() => {
     setScore(null);
     setStatus('');
+    let runStarted = 0;
     function onMessage(event: MessageEvent) {
       if (!game || event.source !== frameRef.current?.contentWindow) return;
       const data = event.data;
@@ -40,6 +41,7 @@ export default function GameStage({ slug, seed, share, location, dailyNumber, on
       if (data.event === 'start' || data.event === 'replay') {
         setScore(null);
         setStatus('');
+        runStarted = performance.now();
         trackEvent('game_start', { game_id: slug, replay: data.event === 'replay', location });
         if (dailyNumber && data.event === 'start') trackEvent('daily_start', { daily_number: dailyNumber, game_id: slug });
         if (!firstPlaySent) {
@@ -51,7 +53,8 @@ export default function GameStage({ slug, seed, share, location, dailyNumber, on
         const value = parseScore(game.unit, data.score);
         if (value === null) return;
         setScore(value);
-        trackEvent('game_complete', { game_id: slug, score: value, location });
+        trackEvent('game_complete', { game_id: slug, score: value, location, ...(runStarted ? { duration_s: Math.round((performance.now() - runStarted) / 1000) } : {}) });
+        runStarted = 0;
         if (dailyNumber) trackEvent('daily_complete', { daily_number: dailyNumber, game_id: slug, score: value });
         callbacks.current.onComplete?.(value);
       }

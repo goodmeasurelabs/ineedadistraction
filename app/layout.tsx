@@ -56,7 +56,16 @@ export default function RootLayout({
           {GA_ID && (
             <>
               <Script src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`} strategy="afterInteractive" />
+              {/* Visiting any page with ?notrack=1 turns analytics off in that browser
+                  (?notrack=0 turns it back on), so the people building the site do
+                  not count as players. */}
               <Script id="ga-init" strategy="afterInteractive">{`
+                try {
+                  var notrack = new URLSearchParams(location.search).get('notrack');
+                  if (notrack === '1') localStorage.setItem('inad:notrack', '1');
+                  if (notrack === '0') localStorage.removeItem('inad:notrack');
+                  if (localStorage.getItem('inad:notrack') === '1') window['ga-disable-${GA_ID}'] = true;
+                } catch (e) {}
                 window.dataLayer = window.dataLayer || [];
                 function gtag(){dataLayer.push(arguments);}
                 gtag('js', new Date());
