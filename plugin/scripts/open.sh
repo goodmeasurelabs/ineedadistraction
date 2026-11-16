@@ -5,8 +5,11 @@
 #   open.sh --background  same, quietly (used by the hooks)
 #   open.sh --print       only print the link
 # With a Chromium browser installed the game opens as a small pop-up window of
-# its own, sized to sit beside a terminal. Otherwise, or if the file "no-popup"
-# exists in the state directory, it opens as a normal tab.
+# its own, sized to sit beside a terminal. On macOS that window belongs to a
+# separate browser instance (profile in the state directory, "browser"), and a
+# later call brings the same window back to the front rather than opening
+# another. Otherwise, or if the file "no-popup" exists in the state directory,
+# it opens as a normal tab.
 DIR="${INAD_HOME:-$HOME/.config/ineedadistraction}"
 BASE="${INAD_URL:-https://www.ineedadistraction.com}"
 umask 077
@@ -22,10 +25,32 @@ esac
 
 POPUP_ARGS="--app=$URL&popup --window-size=460,800"
 if [ ! -f "$DIR/no-popup" ] && [ "$(uname)" = "Darwin" ]; then
+  # The pop-up runs in a browser instance of its own, with its profile kept in
+  # the state directory. A browser that is already running ignores the window
+  # flags and opens the pop-up behind other apps; a separate instance honours
+  # them, and it has only this one window, so bringing it forward can never
+  # raise some other browser window instead.
+  PROFILE="$DIR/browser"
+  RAISE="$(dirname "$0")/raise.js"
+  popup_pid() {
+    ps -axo pid=,command= | grep -F -- "--user-data-dir=$PROFILE" | grep -v -e '--type=' -e 'grep -F' \
+      | awk '{print $1; exit}'
+  }
+  # One pop-up, not one per call: if it is already open, resurface it.
+  PID=$(popup_pid)
+  if [ -n "$PID" ] && [ "$(osascript -l JavaScript "$RAISE" front "$PID" 2>/dev/null)" = ok ]; then
+    [ "$QUIET" = 1 ] || echo "$URL"; exit 0
+  fi
+  PLACE=$(osascript -l JavaScript "$RAISE" place 2>/dev/null)
   for APP in "Google Chrome" "Brave Browser" "Microsoft Edge" "Chromium"; do
     if [ -d "/Applications/$APP.app" ] || [ -d "$HOME/Applications/$APP.app" ]; then
-      # shellcheck disable=SC2086
-      open -na "$APP" --args $POPUP_ARGS && { [ "$QUIET" = 1 ] || echo "$URL"; exit 0; }
+      if open -na "$APP" --args "--user-data-dir=$PROFILE" --no-first-run --no-default-browser-check \
+           "--app=$URL&popup" --window-size=460,800 ${PLACE:+"--window-position=$PLACE"}; then
+        # A new instance comes up in front by itself. One that was left running
+        # with its window closed does not, so make sure either way.
+        ( sleep 1; PID=$(popup_pid); [ -n "$PID" ] && osascript -l JavaScript "$RAISE" front "$PID" wait ) >/dev/null 2>&1 &
+        [ "$QUIET" = 1 ] || echo "$URL"; exit 0
+      fi
     fi
   done
 elif [ ! -f "$DIR/no-popup" ] && [ -z "$WSL_DISTRO_NAME" ]; then

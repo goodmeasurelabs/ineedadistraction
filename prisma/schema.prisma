@@ -172,6 +172,8 @@ model AgentSession {
   waiting   Int       @default(0) // agent sessions blocked on the user
   waitedAt  DateTime? // last time any session started waiting
   seenAt    DateTime? // last time an arcade tab polled this session
+  focusAt   DateTime? // last time the game asked to be taken back to the terminal
+  focusRun  String?   // which agent session that request was for
 
   @@index([updatedAt])
 }
