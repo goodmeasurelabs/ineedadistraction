@@ -15,6 +15,8 @@ export type AgentSnapshot = {
   working: number; // agent sessions busy right now
   waiting: number; // agent sessions blocked on the user
   waitedAt: number; // epoch ms an agent last started waiting (0 if never)
+  focusAt: number; // epoch ms the game last asked to go back to the terminal (0 if never)
+  focusRun: string | null; // the agent session that request was for
 };
 
 // Tokens are generated on the user's machine. Long enough to be unguessable,

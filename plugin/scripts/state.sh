@@ -175,4 +175,13 @@ fi
   exec sh "$HERE/state.sh" --send "$SESSION" "$SID"
 ) </dev/null >/dev/null 2>&1 &
 
+# While this session waits, listen for the game's "Back to your agent" button.
+# Started from here, not from the sender, so it inherits the terminal's
+# environment, which says which window and tab to bring forward.
+if [ "$STATE" = "waiting" ] && [ "$(uname)" = "Darwin" ]; then
+  (
+    exec sh "$HERE/wait.sh" "$SID"
+  ) </dev/null >/dev/null 2>&1 &
+fi
+
 finish

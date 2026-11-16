@@ -34,6 +34,20 @@ export function readAgentToken(): string | null {
   } catch { return null; }
 }
 
+// Ask the plugin to bring the waiting agent's terminal to the front. The page
+// cannot switch apps itself: the request goes through the server to the plugin,
+// which listens while its agent waits. False if the request could not be sent.
+export async function requestTerminalFocus(): Promise<boolean> {
+  const token = readAgentToken();
+  if (!token) return false;
+  try {
+    const response = await fetch(`/api/agent/${token}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'focus' }),
+    });
+    return response.ok;
+  } catch { return false; }
+}
+
 export function useAgentSync(): AgentSync {
   const [sync, setSync] = useState<AgentSync>(INITIAL);
   const seqRef = useRef(-1);

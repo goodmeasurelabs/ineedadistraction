@@ -17,6 +17,10 @@ On macOS with a Chromium browser the game is a small pop-up window in a browser 
 
 If no browser can be opened (remote shell, container), run `open.sh --print` and give the user the link.
 
+## Getting back to the agent
+
+When the agent finishes or needs the user, the paused game shows a "Back to Claude Code" (or Codex) button. Clicking it brings the terminal to the front; in iTerm it also selects the tab that agent is running in. If several agents are waiting, it goes to the one that stopped most recently. This works on macOS, for up to 30 minutes after the agent stops.
+
 ## Controls
 
 State lives in `~/.config/ineedadistraction/`.
@@ -28,6 +32,7 @@ State lives in `~/.config/ineedadistraction/`.
 | Turn the sync off completely | `touch ~/.config/ineedadistraction/off` |
 | Turn it back on | `rm ~/.config/ineedadistraction/off` |
 | Open the game as a normal browser tab, not a pop-up | `touch ~/.config/ineedadistraction/no-popup` |
+| Stop the game's button from switching to the terminal | `touch ~/.config/ineedadistraction/no-return` |
 | Unpair this machine | `rm ~/.config/ineedadistraction/token` (the next open pairs afresh) |
 
 ## If the game does not pause or resume
@@ -39,3 +44,5 @@ State lives in `~/.config/ineedadistraction/`.
 ## What is sent
 
 Only five things: the word `working`, `waiting` or `idle`; a one-word reason (`prompt`, `done`, `permission`, `question`, `end`); which agent it is; a checksum of the session id (so several agents can be told apart); and a random pairing token made on this machine. Never prompts, file paths, code or tool input.
+
+While an agent waits, the plugin also reads the same status the game page reads, to hear the "Back to" button. That sends nothing beyond the pairing token.
