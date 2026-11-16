@@ -4,6 +4,8 @@
 #   open.sh               open and print the link
 #   open.sh --background  same, quietly (used by the hooks)
 #   open.sh --print       only print the link
+#   open.sh --resurface   quietly bring the pop-up forward, opening it if it is
+#                         closed; does nothing where there is no pop-up
 # With a Chromium browser installed the game opens as a small pop-up window of
 # its own, sized to sit beside a terminal. On macOS that window belongs to a
 # separate browser instance (profile in the state directory, "browser"), and a
@@ -20,6 +22,7 @@ URL="$BASE/agent#t=$(cat "$DIR/token")"
 case "$1" in
   --print) echo "$URL"; exit 0 ;;
   --background) QUIET=1 ;;
+  --resurface) QUIET=1; RESURFACE=1 ;;
   *) QUIET=0 ;;
 esac
 
@@ -62,6 +65,9 @@ elif [ ! -f "$DIR/no-popup" ] && [ -z "$WSL_DISTRO_NAME" ]; then
     fi
   done
 fi
+
+# A tab cannot be found again, so resurfacing must not open one each time.
+[ "$RESURFACE" = 1 ] && exit 0
 
 if command -v open >/dev/null 2>&1 && [ "$(uname)" = "Darwin" ]; then
   if [ "$QUIET" = 1 ]; then open -g "$URL"; else open "$URL"; fi

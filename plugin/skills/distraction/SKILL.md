@@ -13,7 +13,7 @@ The scripts live in this plugin's `scripts/` folder, two levels above this file.
 
 Run `sh <plugin>/scripts/open.sh`. It opens the paired arcade in the browser and prints the link. Then keep working; do not wait for the user to play.
 
-On macOS with a Chromium browser the game is a small pop-up window in a browser instance of its own (profile in `~/.config/ineedadistraction/browser`), so it has its own saves and sign-in. Running `open.sh` again brings that same window back to the front; it does not open a second one.
+On macOS with a Chromium browser the game is a small pop-up window in a browser instance of its own (profile in `~/.config/ineedadistraction/browser`), so it has its own saves and sign-in. Running `open.sh` again brings that same window back to the front; it does not open a second one. The hooks do the same each time the user sends a prompt, so the game is in front as soon as the agent starts working.
 
 If no browser can be opened (remote shell, container), run `open.sh --print` and give the user the link.
 
@@ -27,8 +27,8 @@ State lives in `~/.config/ineedadistraction/`.
 
 | The user wants | Do this |
 |---|---|
-| Stop the game opening by itself each session | `touch ~/.config/ineedadistraction/no-auto-open` |
-| Let it open by itself again | `rm ~/.config/ineedadistraction/no-auto-open` |
+| Stop the game opening or coming forward by itself | `touch ~/.config/ineedadistraction/no-auto-open` |
+| Let it open and come forward by itself again | `rm ~/.config/ineedadistraction/no-auto-open` |
 | Turn the sync off completely | `touch ~/.config/ineedadistraction/off` |
 | Turn it back on | `rm ~/.config/ineedadistraction/off` |
 | Open the game as a normal browser tab, not a pop-up | `touch ~/.config/ineedadistraction/no-popup` |

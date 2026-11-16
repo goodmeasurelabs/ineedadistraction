@@ -154,6 +154,16 @@ SESSION=$(field session_id)
 SID=$(printf '%s' "$SESSION" | cksum 2>/dev/null | cut -d' ' -f1)
 [ -n "$SESSION" ] && [ -n "$SID" ] || SID=0
 LAST=$(cat "$DIR/run.$SID" 2>/dev/null)
+
+# The user just sent a prompt: put the game in front of them now, before the
+# report below and whatever the server says. Only on macOS, where the game is
+# one pop-up window that open.sh can find and bring forward; elsewhere it opens
+# once per session, after the report (see --send).
+if [ "$STATE" = "working" ] && [ "$(uname)" = "Darwin" ] && [ ! -f "$DIR/no-auto-open" ]; then
+  (
+    exec sh "$HERE/open.sh" --resurface
+  ) </dev/null >/dev/null 2>&1 &
+fi
 if [ "$STATE" = "resume" ]; then
   # Only meaningful right after a permission prompt or a question was answered.
   case "$LAST" in "waiting permission"*|"waiting question"*) ;; *) finish ;; esac
