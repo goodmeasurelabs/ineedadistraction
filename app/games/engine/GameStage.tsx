@@ -5,7 +5,7 @@ import Link from 'next/link';
 import type { Game, GameHost, GameModule, RunResult } from './types';
 import { Sfx } from './sfx';
 import { hashString } from './fx';
-import { readAgentToken, requestTerminalFocus, useAgentSync } from './useAgentSync';
+import { readAgentToken, useAgentSync, useReturnToAgent } from './useAgentSync';
 import { trackEvent, trackShareClick } from '../../lib/analytics';
 
 type OtherGame = { slug: string; title: string; emoji: string };
@@ -67,7 +67,7 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
   const [status, setStatus] = useState('');
   const [pause, setPauseState] = useState<PauseCause>(null);
   const [countdown, setCountdown] = useState(0);
-  const [returnNote, setReturnNote] = useState('');
+  const { note: returnNote, back: returnToAgent, clear: clearReturnNote } = useReturnToAgent();
   const [result, setResult] = useState<(RunResult & { newBest: boolean; previousBest: number }) | null>(null);
   const [mode, setMode] = useState<Mode>('endless');
   const [muted, setMuted] = useState(false);
@@ -357,7 +357,7 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
   }, [agent.state, agent.seq, agent.waitedAt, agent.paired, setPause]);
 
   // The note under "Back to your agent" belongs to one wait; drop it afterwards.
-  useEffect(() => { if (agent.state !== 'waiting') setReturnNote(''); }, [agent.state]);
+  useEffect(() => { if (agent.state !== 'waiting') clearReturnNote(); }, [agent.state, clearReturnNote]);
 
   // Tab title carries the agent's status, so it is visible from another window.
   const needsYou = agent.paired && agent.state === 'waiting';
@@ -398,11 +398,9 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
   }
 
   const agentName = AGENT_NAMES[agent.agent ?? ''] ?? 'Your agent';
-  async function backToAgent() {
-    setReturnNote('Bringing your terminal forward…');
+  function backToAgent() {
     trackEvent('agent_return_click', { game_id: slug });
-    const sent = await requestTerminalFocus();
-    setReturnNote(sent ? 'Nothing happened? Switch to your terminal yourself. This button needs the latest plugin, on a Mac.' : 'Could not reach the plugin. Switch to your terminal yourself.');
+    void returnToAgent();
   }
   const agentLine = agent.reason === 'permission' ? `${agentName} is asking for permission.`
     : agent.reason === 'question' ? `${agentName} has a question for you.`

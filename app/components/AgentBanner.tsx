@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { requestTerminalFocus, useAgentSync } from '../games/engine/useAgentSync';
+import { useAgentSync, useReturnToAgent } from '../games/engine/useAgentSync';
 import { trackEvent } from '../lib/analytics';
 
 // Agent Mode outside the arcade games. A browser paired with the coding-agent
@@ -21,8 +21,8 @@ export default function AgentBanner() {
 
 function Banner() {
   const agent = useAgentSync();
-  const [note, setNote] = useState('');
-  useEffect(() => { if (agent.state !== 'waiting') setNote(''); }, [agent.state]);
+  const { note, back: returnToAgent, clear } = useReturnToAgent();
+  useEffect(() => { if (agent.state !== 'waiting') clear(); }, [agent.state, clear]);
 
   if (!agent.paired || (agent.state !== 'waiting' && agent.state !== 'working')) return null;
 
@@ -35,11 +35,9 @@ function Banner() {
     : agent.reason === 'question' ? `${name} has a question for you.`
     : `${name} finished its turn.`;
 
-  async function back() {
-    setNote('Bringing your terminal forward…');
+  function back() {
     trackEvent('agent_return_click', { location: 'banner' });
-    const sent = await requestTerminalFocus();
-    setNote(sent ? 'Nothing happened? Switch to your terminal yourself.' : 'Could not reach the plugin. Switch to your terminal yourself.');
+    void returnToAgent();
   }
 
   return (
