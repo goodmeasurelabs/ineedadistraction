@@ -3,6 +3,7 @@ import { Press_Start_2P, VT323 } from "next/font/google";
 import { ClerkProvider } from '@clerk/nextjs';
 import Script from 'next/script';
 import AutoClaim from "./components/AutoClaim";
+import AgentBanner from "./components/AgentBanner";
 import "./globals.css";
 
 const GA_ID = process.env.GOOGLE_MEASUREMENT_ID;
@@ -51,6 +52,7 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en" className={`${pixelFont.variable} ${arcadeFont.variable}`}>
         <body className="antialiased">
+          <AgentBanner />
           {children}
           <AutoClaim />
           {GA_ID && (
