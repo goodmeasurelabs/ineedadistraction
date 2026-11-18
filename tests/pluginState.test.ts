@@ -70,9 +70,20 @@ exec /bin/sh "$@"
         type: 'turn_context', payload: { turn_id: 'test-turn', approvals_reviewer: reviewer, approval_policy: policy },
       }) + '\n');
     },
+    clearLastReport() { rmSync(join(dir, 'last')); },
     close() { rmSync(dir, { recursive: true, force: true }); },
   };
 }
+
+test('a new Codex prompt reports working again when the same session survived a restart', () => {
+  const s = session();
+  try {
+    s.event('UserPromptSubmit');
+    s.clearLastReport();
+    assert.equal(s.event('UserPromptSubmit'), 'working prompt codex');
+    assert.equal(s.event('Stop'), 'waiting done codex');
+  } finally { s.close(); }
+});
 
 test('Codex stays working through tools and resumes a continued Stop before root sampling', () => {
   const s = session();

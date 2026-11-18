@@ -91,15 +91,15 @@ export function useAgentSync(): AgentSync {
           if (!response.ok) throw new Error(String(response.status));
           const data = await response.json();
           if (!alive) return;
-          if (data.seq !== seqRef.current) {
-            seqRef.current = data.seq;
-            // Keep the working clock running while other sessions come and go.
-            setSync((prev) => ({
+          seqRef.current = data.seq;
+          // Expiry can change the state without a new report or sequence.
+          setSync((prev) => (
+            prev.seq === data.seq && prev.state === data.state ? prev : {
               paired: true, state: data.state, reason: data.reason ?? null, agent: data.agent ?? null,
               working: Number(data.working) || 0, waiting: Number(data.waiting) || 0, waitedAt: Number(data.waitedAt) || 0,
               since: prev.state === data.state ? prev.since : Date.now(), seq: data.seq,
-            }));
-          }
+            }
+          ));
           // Nothing reported yet: the first poll returns straight away, so wait before asking again.
           if (data.state === 'unpaired') await sleep(2500);
         } catch {

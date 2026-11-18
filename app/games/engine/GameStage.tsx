@@ -7,6 +7,7 @@ import { Sfx } from './sfx';
 import { hashString } from './fx';
 import { readAgentToken, useAgentSync, useReturnToAgent } from './useAgentSync';
 import { trackEvent, trackShareClick } from '../../lib/analytics';
+import { shouldPauseForAgent } from '../../lib/agentSession';
 
 type OtherGame = { slug: string; title: string; emoji: string };
 
@@ -282,6 +283,7 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
     canvas.addEventListener('pointerleave', onLeave);
 
     function onKey(event: KeyboardEvent) {
+      if (state.pause === 'agent') return;
       const target = event.target as HTMLElement | null;
       if (target && /INPUT|TEXTAREA|SELECT/.test(target.tagName)) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -336,23 +338,20 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
   }, [slug, module, mode, runKey]);
 
   // ---- Agent Mode -----------------------------------------------------------
-  const lastAgentState = useRef<string>('unpaired');
-  const lastWaited = useRef(0);
+  const previousAgent = useRef({ state: 'unpaired', waitedAt: 0 });
+  const listeningSince = useRef(0);
+  useEffect(() => { listeningSince.current = Date.now(); }, []);
   useEffect(() => {
     const state = live.current;
-    const previous = lastAgentState.current;
-    const another = previous === 'waiting' && agent.waitedAt > lastWaited.current;
-    lastAgentState.current = agent.state;
-    lastWaited.current = agent.waitedAt;
+    const current = { state: agent.state, waitedAt: agent.waitedAt };
+    const shouldPause = shouldPauseForAgent(previousAgent.current, current, listeningSince.current);
+    previousAgent.current = current;
     if (!agent.paired) return;
-    // Pause when an agent stops, including a second one stopping while the
-    // first is still waiting and the player chose to keep going.
-    if (agent.state === 'waiting' && (previous === 'working' || another)) {
-      // The agent just stopped: pause, unless the run is already over.
-      if (!state.over && state.pause !== 'agent') setPause('agent');
+    if (shouldPause) {
+      if (state.pause !== 'agent') setPause('agent');
       sfxRef.current?.chime();
-    } else if (agent.state === 'working' && state.pause === 'agent') {
-      setPause(null, true);
+    } else if (agent.state !== 'waiting' && state.pause === 'agent') {
+      setPause(null, agent.state === 'working');
     }
   }, [agent.state, agent.seq, agent.waitedAt, agent.paired, setPause]);
 
@@ -451,14 +450,14 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
 
         {countdown > 0 && pause === null && <div className="stage-countdown" aria-hidden="true">{countdown}</div>}
 
-        {pause === 'agent' && !result && (
+        {pause === 'agent' && (
           <div className="stage-overlay agent-overlay" role="dialog" aria-label="Your agent needs you">
-            <p className="overlay-eyebrow">GAME PAUSED · PROGRESS SAVED</p>
+            <p className="overlay-eyebrow">{result ? 'RUN COMPLETE' : 'GAME PAUSED · PROGRESS SAVED'}</p>
             <h2>{agentLine}</h2>
-            <p>Go answer it. This run will be right here when it gets back to work.{agent.state === 'waiting' && others ? crowd : ''}</p>
+            <p>{result ? 'Your score will be here when you return.' : 'Your game will be here when you return.'}{crowd}</p>
             {agent.state === 'waiting' && <button className="overlay-primary" autoFocus onClick={backToAgent}>Back to {agentName}</button>}
             {returnNote && <p className="overlay-note" role="status">{returnNote}</p>}
-            <button className="overlay-ghost" onClick={() => setPause(null, true)}>Keep playing anyway</button>
+            <button className="overlay-ghost" onClick={() => setPause(null, true)}>{result ? 'See score' : 'Keep playing anyway'}</button>
           </div>
         )}
         {(pause === 'manual' || pause === 'blur') && !result && (
@@ -469,7 +468,7 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
           </div>
         )}
 
-        {result && (
+        {result && pause !== 'agent' && (
           <div className="stage-overlay result" role="dialog" aria-label="Run complete">
             <p className="overlay-eyebrow">{result.headline ?? 'RUN COMPLETE'}{mode === 'daily' ? ' · DAILY' : ''}</p>
             <div className="result-score">{result.score.toLocaleString()}</div>

@@ -53,11 +53,24 @@ export const RUN_STALE_MS = 12 * 60 * 60 * 1000;
 
 type RunLike = { state: string; reason: string | null; agent: string | null; updatedAt: Date };
 
-// What the game should react to: anyone blocked on the user wins (newest
-// first), otherwise anyone still working, otherwise idle.
+// A new working report supersedes earlier waits in the shared arcade. An
+// abandoned session can otherwise keep the arcade paused across an app restart.
+// A wait reported after work starts still interrupts the game.
 export function rollUp(runs: RunLike[]): { state: AgentState; reason: string | null; agent: string | null; working: number; waiting: number } {
   const newest = (state: string) => runs.filter((r) => r.state === state).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-  const waiting = newest('waiting'), working = newest('working');
+  const working = newest('working');
+  const lastWorking = working[0]?.updatedAt.getTime() ?? -Infinity;
+  const waiting = newest('waiting').filter((run) => run.updatedAt.getTime() >= lastWorking);
   const lead = waiting[0] ?? working[0];
   return { state: waiting.length ? 'waiting' : working.length ? 'working' : 'idle', reason: lead?.reason ?? null, agent: lead?.agent ?? null, working: working.length, waiting: waiting.length };
+}
+
+export function shouldPauseForAgent(
+  previous: { state: string; waitedAt: number },
+  current: { state: string; waitedAt: number },
+  listeningSince: number,
+): boolean {
+  if (current.state !== 'waiting') return false;
+  if (previous.state === 'unpaired') return current.waitedAt >= listeningSince;
+  return previous.state === 'working' || current.waitedAt > previous.waitedAt;
 }

@@ -52,9 +52,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
     if (limited) return limited;
     const row = await prisma.$transaction(async (tx) => {
       const session = await tx.agentSession.findUnique({ where: { token } });
-      if (!session) return null;
+      if (!session || snapshot(session).state !== 'waiting') return session;
       // Several agents may be waiting: go to the one that stopped most recently.
-      const ready = await tx.agentRun.findFirst({ where: { token, state: 'waiting' }, orderBy: { updatedAt: 'desc' } });
+      const ready = await tx.agentRun.findFirst({
+        where: { token, state: 'waiting', updatedAt: { gte: new Date(Date.now() - RUN_STALE_MS) } },
+        orderBy: { updatedAt: 'desc' },
+      });
       if (!ready) return session;
       return tx.agentSession.update({ where: { token }, data: { focusAt: new Date(), focusRun: ready.run, seq: { increment: 1 } } });
     });

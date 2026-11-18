@@ -233,8 +233,10 @@ if [ "$STATE" = "resume" ]; then
   STATE="working"; REASON="prompt"
 fi
 
-# Skip exact repeats so chatty events cost nothing.
-[ "$LAST" = "$STATE $REASON $AGENT" ] && finish
+# Always report new prompts, including after a restart or a lost working update.
+if [ "$EVENT" != "UserPromptSubmit" ] && [ "$LAST" = "$STATE $REASON $AGENT" ]; then
+  finish
+fi
 # Readers must see either the previous state or the complete new state.
 if ! { printf '%s %s %s' "$STATE" "$REASON" "$AGENT" > "$DIR/tmp.$$" &&
   cp "$DIR/tmp.$$" "$DIR/last" && mv -f "$DIR/tmp.$$" "$DIR/run.$SID"; } 2>/dev/null; then
