@@ -181,12 +181,19 @@ model AgentSession {
 // One row per agent session under a pairing token, so several agents running
 // at once do not overwrite each other. AgentSession holds the roll-up.
 model AgentRun {
-  token     String
-  run       String   // opaque per-session id chosen by the plugin
-  state     String   // 'working' | 'waiting'
-  reason    String?
-  agent     String?
-  updatedAt DateTime @default(now())
+  token        String
+  run          String    // opaque per-session id chosen by the plugin
+  state        String    // 'working' | 'waiting' | 'idle'
+  reason       String?
+  agent        String?
+  updatedAt    DateTime  @default(now())
+  revision     Int       @default(0) // changes only for a new event on this run
+  eventId      String?   // opaque identifier for the latest plugin report
+  eventAt      DateTime? // plugin clock used for same-run event ordering
+  promptAt     DateTime? // plugin clock of the latest user prompt
+  acknowledged Boolean  @default(false)
+  dismissed    Boolean   @default(false)
+  returnTarget String?   // 'chat' | 'pane' | 'app' | 'unavailable'
 
   @@id([token, run])
 }

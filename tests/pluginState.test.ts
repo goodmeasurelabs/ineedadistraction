@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -20,13 +20,28 @@ function session(agent: 'codex' | 'claude' = 'codex') {
   // helpers are stubbed so tests cannot access the network or switch apps.
   writeFileSync(join(dir, 'sh'), `#!/bin/sh
 case "$1" in */open.sh|*/wait.sh) exit 0 ;; esac
-[ "$2" = --send ] && exit 0
+case "$2" in --send|--listen) exit 0 ;; esac
 exec /bin/sh "$@"
 `, { mode: 0o755 });
   writeFileSync(join(dir, 'uname'), '#!/bin/sh\nprintf Darwin\n', { mode: 0o755 });
-  writeFileSync(join(dir, 'curl'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  writeFileSync(join(dir, 'curl'), `#!/bin/sh
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = -d ]; then
+    printf '%s\\n' "$2" >> "$INAD_HOME/request-bodies"
+    break
+  fi
+  shift
+done
+[ "$TEST_REQUEST_FAILURE" = 1 ] && exit 1
+printf '{"attached":true}'
+`, { mode: 0o755 });
   writeFileSync(join(dir, 'token'), 'isolated-test-pairing-token');
   writeFileSync(join(dir, 'no-auto-open'), '');
+  function runFile() {
+    const file = readdirSync(dir).find((name) => /^run\.\d+$/.test(name));
+    assert.ok(file, 'expected a local run record');
+    return file;
+  }
   return {
     event(event: string, fields: Record<string, unknown> = {}, reverse = false) {
       const input = {
@@ -47,7 +62,7 @@ exec /bin/sh "$@"
               NODE_ENV: 'test',
               PATH: `${dir}:/usr/bin:/bin`, INAD_HOME: dir,
               CLAUDE_PLUGIN_ROOT: plugin,
-              ...(agent === 'codex' ? { PLUGIN_ROOT: plugin } : {}),
+              ...(agent === 'codex' ? { PLUGIN_ROOT: plugin, CODEX_INTERNAL_ORIGINATOR_OVERRIDE: 'Codex Desktop' } : {}),
             },
           });
           assert.ifError(result.error);
@@ -57,6 +72,20 @@ exec /bin/sh "$@"
         }
       }
       return readFileSync(join(dir, 'last'), 'utf8');
+    },
+    record() {
+      const [state, reason, label, at, id, promptAt, target, locator] = readFileSync(join(dir, runFile()), 'utf8').trim().split(' ');
+      return { state, reason, label, at: Number(at), id, promptAt: Number(promptAt), target, locator };
+    },
+    send(fail = false) {
+      const sid = runFile().slice(4);
+      const result = spawnSync('/bin/sh', [join(plugin, 'scripts/state.sh'), '--send', '', sid], {
+        encoding: 'utf8', timeout: 5000,
+        env: { NODE_ENV: 'test', PATH: `${dir}:/usr/bin:/bin`, INAD_HOME: dir, TEST_REQUEST_FAILURE: fail ? '1' : '' },
+      });
+      assert.ifError(result.error);
+      assert.equal(result.status, 0, result.stderr);
+      return readFileSync(join(dir, 'request-bodies'), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
     },
     answer(call: string, index = 0) {
       const reply = [{ questionItemId: JSON.stringify(['request_user_input_async', call, index]), answer: 'yes' }];
@@ -74,6 +103,54 @@ exec /bin/sh "$@"
     close() { rmSync(dir, { recursive: true, force: true }); },
   };
 }
+
+test('prompt identity survives a coalesced stop, retries, duplicates, and a fast quit', () => {
+  const s = session();
+  const session_id = 'a1234567-b123-c123-d123-e12345678901';
+  try {
+    s.event('UserPromptSubmit', { session_id, prompt: 'private prompt' });
+    const working = s.record();
+    s.event('Stop', { session_id });
+    const finished = s.record();
+    s.event('Stop', { session_id, stop_hook_active: true });
+    s.event('SessionEnd', { session_id });
+    assert.deepEqual(s.record(), finished);
+    assert.equal(finished.promptAt, working.at);
+    assert.ok(finished.at > working.at);
+    assert.notEqual(finished.id, working.id);
+    assert.equal(finished.target, 'chat');
+    assert.equal(finished.locator, session_id);
+    const [failed] = s.send(true);
+    assert.deepEqual(s.send(), [failed, failed]);
+    assert.deepEqual(s.send(), [failed, failed]);
+    assert.deepEqual(failed, {
+      state: 'waiting', reason: 'done', agent: 'codex', session: failed.session,
+      eventAt: finished.at, eventId: finished.id, promptAt: working.at, returnTarget: 'chat',
+    });
+    assert.notEqual(failed.session, session_id);
+  } finally { s.close(); }
+});
+
+test('a second question gets a new notification version while repeated calls do not', () => {
+  const s = session();
+  try {
+    s.event('UserPromptSubmit');
+    const ask = (tool_use_id: string) => s.event('PreToolUse', {
+      tool_name: 'request_user_input_async', tool_use_id, tool_input: { questions: [{ title: 'Continue?' }] },
+    });
+    ask('call_first');
+    const first = s.record();
+    ask('call_first');
+    assert.deepEqual(s.record(), first);
+    ask('call_next');
+    const next = s.record();
+    assert.ok(next.at > first.at);
+    assert.notEqual(next.id, first.id);
+    assert.equal(next.promptAt, first.promptAt);
+    assert.equal(s.event('Stop'), 'waiting question codex');
+    assert.deepEqual(s.record(), next);
+  } finally { s.close(); }
+});
 
 test('a new Codex prompt reports working again when the same session survived a restart', () => {
   const s = session();

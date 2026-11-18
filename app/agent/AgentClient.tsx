@@ -68,7 +68,7 @@ export default function AgentClient() {
         <section className="pair-hero">
           <p className="pair-eyebrow">FOR CODEX AND CLAUDE CODE</p>
           <h1>Your agent works.<br /><em>You play.</em></h1>
-          <p className="pair-lede">Send a prompt and a game opens beside your terminal. The moment your agent finishes, asks a question or needs a permission, the game pauses and tells you. Answer, and it picks up where you left off.</p>
+          <p className="pair-lede">Send a prompt and a game opens beside your agent. When that turn finishes, the game tells you. Questions and approvals stay in your input queue, with a button to return to each chat.</p>
           {paired && <Status />}
         </section>
 
@@ -96,8 +96,8 @@ export default function AgentClient() {
             </section>
 
             <section className="pair-facts">
-              <div><h3>Pauses on a dime</h3><p>Turn finished, question asked, permission needed: each one freezes the game with your run saved.</p></div>
-              <div><h3>Private by design</h3><p>The plugin sends four things: working or waiting, a one-word reason, which agent, and a random pairing code. Never prompts, paths or code.</p></div>
+              <div><h3>Pick up where you left off</h3><p>The arcade pauses for your current turn and new input requests. Keep playing dismisses the interruption, and recent chats stay available.</p></div>
+              <div><h3>Private by design</h3><p>The plugin shares status, timing, agent type, return capability and opaque identifiers. Chat contents and return destinations stay on your machine.</p></div>
               <div><h3>Easy to switch off</h3><p>Ask your agent to turn the distraction off, or stop it opening by itself. One file, no account.</p></div>
             </section>
 

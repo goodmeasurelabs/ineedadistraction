@@ -4,7 +4,7 @@ Games built to be hard to put down, at [ineedadistraction.com](https://www.ineed
 
 ## Play while your agent works (Codex and Claude Code)
 
-The plugin tells the arcade whether your agent is working or waiting. The game pauses the moment the agent finishes a turn, asks a question or needs a permission, and resumes when you answer.
+The game pauses when the turn you are waiting for finishes or an agent needs input. Keep playing to dismiss the interruption, open a recent chat to review its result, or use the input queue to return to a question or approval.
 
 **Claude Code**
 
@@ -26,7 +26,7 @@ Then review and trust the plugin's hooks in **Settings > Hooks** in Codex Deskto
 
 Send your agent any prompt and the arcade opens in your browser, already paired. Or ask it to "open my distraction".
 
-On macOS, the paused game's **Back to Codex** button brings Codex Desktop forward. For Codex CLI and Claude Code, the button brings the terminal forward (including the correct iTerm tab).
+On macOS, the return button opens the selected Codex Desktop chat or the originating iTerm pane for Codex CLI and Claude Code. Other terminals can come forward at the app level. A closed iTerm pane falls back to opening its app.
 
 Codex has its own hook configuration: ordinary tool calls keep the game running, questions pause it, and continued turns resume it if a Stop hook asks Codex to keep working. Background compaction and child-agent model requests do not resume a finished turn.
 
@@ -34,7 +34,7 @@ Asynchronous Codex questions remain paused while other work continues. A local P
 
 Codex's permission hook fires before its automatic reviewer. Shell and patch permission checks therefore keep the game running in automatic-review or don't-ask modes. The helper checks the current turn's local approval metadata; missing, stale or unfamiliar metadata preserves the pause. Explicit questions, manual-review checks and connected-app approval requests still pause the game. This changes only game notifications, never Codex's approval decisions. Human-only command or category-policy overrides can still require approval in automatic mode; those use Codex's own approval prompt without a game pause.
 
-**What the plugin sends:** the word `working`, `waiting` or `idle`; a one-word reason; which agent it is; a checksum of the session id (so several agents can be told apart); and a random pairing token generated on your machine. Never prompts, file paths, code or tool input. Source: [`plugin/scripts/state.sh`](plugin/scripts/state.sh).
+The plugin reports the state and reason, agent label, checksum of the session ID, opaque event ID, timestamps, and return target type using a locally generated pairing token. Chat titles, contents, and actual chat or terminal pane IDs stay on the machine. See [state.sh](plugin/scripts/state.sh).
 
 **Controls:** `touch ~/.config/ineedadistraction/no-auto-open` stops the arcade opening by itself; `touch ~/.config/ineedadistraction/off` turns the sync off.
 

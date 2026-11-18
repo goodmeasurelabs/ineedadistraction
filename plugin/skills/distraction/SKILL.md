@@ -19,7 +19,9 @@ If no browser can be opened (remote shell, container), run `open.sh --print` and
 
 ## Getting back to the agent
 
-When the agent finishes or needs the user, the paused game shows a "Back to Claude Code" (or Codex) button. Clicking it brings Codex Desktop to the front when the agent runs there. For Claude Code or Codex CLI, it brings the terminal to the front; in iTerm it also selects the tab that agent is running in. If several agents are waiting, it goes to the one that stopped most recently. This works on macOS, for up to 30 minutes after the agent stops.
+The game pauses when the turn you are waiting for finishes or when an agent needs input. **Keep playing** dismisses the interruption. Finished turns are available under recent chats. Questions and approvals stay in the input queue until they resolve or you clear them from the game.
+
+On macOS, open an entry to return to its Codex Desktop chat or the originating iTerm pane for Claude Code or Codex CLI. If the pane is gone or the terminal cannot select a specific pane, the button can bring the app forward. The plugin remembers recent return locations locally for up to seven days. If you reopen the arcade after closing it, use `open.sh` to restart the return listener.
 
 ## Controls
 
@@ -49,6 +51,6 @@ Codex's `PermissionRequest` event occurs before automatic approval review. The l
 
 ## What is sent
 
-Only five things: the word `working`, `waiting` or `idle`; a one-word reason (`prompt`, `done`, `permission`, `question`, `end`); which agent it is; a checksum of the session id (so several agents can be told apart); and a random pairing token made on this machine. Never prompts, file paths, code or tool input.
+Reports send the state and reason, agent label, checksum of the session ID, opaque event ID, timestamps, and return target type. A random token generated on the machine pairs the browser and plugin. Chat titles and contents, file paths, tool input, and the actual Codex chat or terminal pane IDs stay on the machine.
 
-While an agent waits, the plugin also reads the same status the game page reads, to hear the "Back to" button. That sends nothing beyond the pairing token.
+The macOS listener reads the status endpoint while the arcade is connected so it can respond when you open a chat from the game.

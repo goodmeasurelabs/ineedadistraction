@@ -5,9 +5,9 @@ import Link from 'next/link';
 import type { Game, GameHost, GameModule, RunResult } from './types';
 import { Sfx } from './sfx';
 import { hashString } from './fx';
-import { readAgentToken, useAgentSync, useReturnToAgent } from './useAgentSync';
+import { readAgentToken, useAgentSync } from './useAgentSync';
 import { trackEvent, trackShareClick } from '../../lib/analytics';
-import { shouldPauseForAgent } from '../../lib/agentSession';
+import AgentQueue from '../../components/AgentQueue';
 
 type OtherGame = { slug: string; title: string; emoji: string };
 
@@ -45,13 +45,6 @@ const store = {
   del(key: string) { try { localStorage.removeItem(key); } catch { /* optional */ } },
 };
 
-function formatClock(ms: number) {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-}
-
-const AGENT_NAMES: Record<string, string> = { codex: 'Codex', 'claude-code': 'Claude Code' };
-
 export default function GameStage({ slug, title, hint, accent, module, others }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -60,7 +53,7 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
   const live = useRef({
     w: 0, h: 0, dpr: 1, t: 0, shake: 0, freezeUntil: 0, pause: null as PauseCause, countdown: 0, over: false,
     dirty: true, score: 0, best: 0, started: 0, interacted: false, rng: makeRng(1), seed: 1, mode: 'endless' as Mode,
-    agentDismissedSeq: -1, reducedMotion: false, overAt: 0,
+    reducedMotion: false, overAt: 0,
   });
 
   const [score, setScore] = useState(0);
@@ -68,14 +61,12 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
   const [status, setStatus] = useState('');
   const [pause, setPauseState] = useState<PauseCause>(null);
   const [countdown, setCountdown] = useState(0);
-  const { note: returnNote, back: returnToAgent, clear: clearReturnNote } = useReturnToAgent();
   const [result, setResult] = useState<(RunResult & { newBest: boolean; previousBest: number }) | null>(null);
   const [mode, setMode] = useState<Mode>('endless');
   const [muted, setMuted] = useState(false);
   const [shareNote, setShareNote] = useState('');
   const [showHint, setShowHint] = useState(true);
   const [runKey, setRunKey] = useState(0);
-  const [now, setNow] = useState(0);
   const agent = useAgentSync();
 
   // Daily runs chase their own number: today's best on today's seed.
@@ -338,28 +329,20 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
   }, [slug, module, mode, runKey]);
 
   // ---- Agent Mode -----------------------------------------------------------
-  const previousAgent = useRef({ state: 'unpaired', waitedAt: 0 });
-  const listeningSince = useRef(0);
-  useEffect(() => { listeningSince.current = Date.now(); }, []);
+  const lastNotice = useRef('');
   useEffect(() => {
-    const state = live.current;
-    const current = { state: agent.state, waitedAt: agent.waitedAt };
-    const shouldPause = shouldPauseForAgent(previousAgent.current, current, listeningSince.current);
-    previousAgent.current = current;
-    if (!agent.paired) return;
-    if (shouldPause) {
-      if (state.pause !== 'agent') setPause('agent');
-      sfxRef.current?.chime();
-    } else if (agent.state !== 'waiting' && state.pause === 'agent') {
-      setPause(null, agent.state === 'working');
+    const noticeKey = agent.notice ? `${agent.notice.run}:${agent.notice.revision}` : '';
+    if (noticeKey) {
+      setPause('agent');
+      if (lastNotice.current !== noticeKey) sfxRef.current?.chime();
+    } else if (live.current.pause === 'agent') {
+      setPause(null, true);
     }
-  }, [agent.state, agent.seq, agent.waitedAt, agent.paired, setPause]);
-
-  // The note under "Back to your agent" belongs to one wait; drop it afterwards.
-  useEffect(() => { if (agent.state !== 'waiting') clearReturnNote(); }, [agent.state, clearReturnNote]);
+    lastNotice.current = noticeKey;
+  }, [agent.notice, setPause, runKey]);
 
   // Tab title carries the agent's status, so it is visible from another window.
-  const needsYou = agent.paired && agent.state === 'waiting';
+  const needsYou = agent.paired && !!agent.notice;
   useEffect(() => {
     if (!agent.paired) return;
     const base = `${title} · I Need a Distraction`;
@@ -369,13 +352,6 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
     const timer = setInterval(() => { on = !on; document.title = on ? `${title} (paused)` : '● Your agent needs you'; }, 1100);
     return () => { clearInterval(timer); document.title = base; };
   }, [needsYou, agent.paired, agent.state, title]);
-
-  useEffect(() => {
-    if (!agent.paired || agent.state !== 'working') return;
-    setNow(Date.now());
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [agent.paired, agent.state, agent.since]);
 
   // ---- Actions --------------------------------------------------------------
   function again() { if (live.current.over && performance.now() - live.current.overAt < 700) return; sfxRef.current?.unlock(); setRunKey((k) => k + 1); }
@@ -396,19 +372,6 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
     } catch (error) { if (!(error instanceof Error && error.name === 'AbortError')) setShareNote('Could not share. Copy the page address instead.'); }
   }
 
-  const agentName = AGENT_NAMES[agent.agent ?? ''] ?? 'Your agent';
-  function backToAgent() {
-    trackEvent('agent_return_click', { game_id: slug });
-    void returnToAgent();
-  }
-  const agentLine = agent.reason === 'permission' ? `${agentName} is asking for permission.`
-    : agent.reason === 'question' ? `${agentName} has a question for you.`
-    : `${agentName} finished its turn.`;
-  // With several agents running, say how many are in each state.
-  const several = agent.working + agent.waiting > 1;
-  const crowd = !several ? '' : agent.state === 'waiting'
-    ? ` ${agent.waiting > 1 ? `${agent.waiting} agents need you` : '1 agent needs you'}${agent.working ? `, ${agent.working} still working` : ''}.`
-    : ` ${agent.working} agents working.`;
   const gap = result && !result.newBest && result.previousBest > result.score ? result.previousBest - result.score : 0;
 
   return (
@@ -433,16 +396,7 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
         </div>
       </header>
 
-      {agent.paired && (
-        <div className={`agent-bar agent-${agent.state}`} role="status">
-          <i aria-hidden="true" />
-          {agent.state === 'working' && <span>{several ? `${agent.working} agents working` : `${agentName} is working`} <b>{formatClock(now - agent.since)}</b>. Play on.</span>}
-          {agent.state === 'waiting' && <span>{agentLine}{several ? crowd : ' It is waiting on you.'}</span>}
-          {agent.state === 'waiting' && <button className="agent-return" onClick={backToAgent}>Back to {agentName}</button>}
-          {agent.state === 'idle' && <span>{agentName} is idle. Play on your own time.</span>}
-          {agent.state === 'unpaired' && <span>Paired. Waiting for your agent&rsquo;s first signal.</span>}
-        </div>
-      )}
+      <AgentQueue agent={agent} />
 
       <div className="stage-canvas" ref={wrapRef}>
         <canvas ref={canvasRef} aria-label={`${title} game`} />
@@ -450,16 +404,6 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
 
         {countdown > 0 && pause === null && <div className="stage-countdown" aria-hidden="true">{countdown}</div>}
 
-        {pause === 'agent' && (
-          <div className="stage-overlay agent-overlay" role="dialog" aria-label="Your agent needs you">
-            <p className="overlay-eyebrow">{result ? 'RUN COMPLETE' : 'GAME PAUSED · PROGRESS SAVED'}</p>
-            <h2>{agentLine}</h2>
-            <p>{result ? 'Your score will be here when you return.' : 'Your game will be here when you return.'}{crowd}</p>
-            {agent.state === 'waiting' && <button className="overlay-primary" autoFocus onClick={backToAgent}>Back to {agentName}</button>}
-            {returnNote && <p className="overlay-note" role="status">{returnNote}</p>}
-            <button className="overlay-ghost" onClick={() => setPause(null, true)}>{result ? 'See score' : 'Keep playing anyway'}</button>
-          </div>
-        )}
         {(pause === 'manual' || pause === 'blur') && !result && (
           <div className="stage-overlay" role="dialog" aria-label="Paused">
             <p className="overlay-eyebrow">PAUSED</p>

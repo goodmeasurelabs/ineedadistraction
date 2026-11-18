@@ -26,6 +26,10 @@ case "$1" in
   *) QUIET=0 ;;
 esac
 
+if [ "$(uname)" = "Darwin" ] && [ ! -f "$DIR/off" ] && [ ! -f "$DIR/no-return" ]; then
+  (exec nohup sh "$(dirname "$0")/state.sh" --listen) </dev/null >/dev/null 2>&1 &
+fi
+
 POPUP_ARGS="--app=$URL&popup --window-size=460,800"
 if [ ! -f "$DIR/no-popup" ] && [ "$(uname)" = "Darwin" ]; then
   # The pop-up runs in a browser instance of its own, with its profile kept in

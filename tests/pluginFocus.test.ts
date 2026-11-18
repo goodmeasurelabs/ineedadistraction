@@ -10,7 +10,7 @@ const iTermSession = 'A1234567-B123-C123-D123-E12345678901';
 
 // Stub every external command the focus script uses. Nothing in this suite can
 // open an app or execute AppleScript, even when it runs on a developer's Mac.
-function focus(env: Record<string, string> = {}) {
+function focus(env: Record<string, string> = {}, args: string[] = []) {
   const dir = mkdtempSync(join(tmpdir(), 'inad-focus-test-'));
   const callsFile = join(dir, 'calls');
   const appleScriptFile = join(dir, 'applescript');
@@ -22,7 +22,9 @@ printf '\\t%s' "$@" >> "$FOCUS_TEST_CALLS"
 printf '\\n' >> "$FOCUS_TEST_CALLS"
 `;
     writeFileSync(join(dir, 'uname'), '#!/bin/sh\nprintf "%s\\n" "$FOCUS_TEST_PLATFORM"\n', { mode: 0o755 });
-    writeFileSync(join(dir, 'open'), `#!/bin/sh\n${record}`, { mode: 0o755 });
+    writeFileSync(join(dir, 'open'), `#!/bin/sh\n${record}
+if [ "$#" -eq 3 ]; then exit "$FOCUS_TEST_LINK_EXIT"; fi
+`, { mode: 0o755 });
     writeFileSync(join(dir, 'osascript'), `#!/bin/sh
 ${record}
 while IFS= read -r line; do
@@ -31,32 +33,94 @@ done
 printf '%s\\n' "$FOCUS_TEST_OSASCRIPT_RESULT"
 `, { mode: 0o755 });
 
-    const result = spawnSync('/bin/sh', [focusScript], {
+    const result = spawnSync('/bin/sh', [focusScript, ...args], {
       encoding: 'utf8',
       timeout: 5000,
       // Do not inherit Codex or the terminal environment running the test.
       env: {
         ...env,
         NODE_ENV: 'test',
-        PATH: dir,
+        PATH: `${dir}:/usr/bin:/bin`,
         FOCUS_TEST_CALLS: callsFile,
         FOCUS_TEST_APPLESCRIPT: appleScriptFile,
         FOCUS_TEST_PLATFORM: env.FOCUS_TEST_PLATFORM ?? 'Darwin',
         FOCUS_TEST_OSASCRIPT_RESULT: env.FOCUS_TEST_OSASCRIPT_RESULT ?? 'ok',
+        FOCUS_TEST_LINK_EXIT: env.FOCUS_TEST_LINK_EXIT ?? '0',
       },
     });
     assert.ifError(result.error);
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, '');
     assert.equal(result.stderr, '');
     return {
       calls: readFileSync(callsFile, 'utf8').trim().split('\n').filter(Boolean).map((line) => line.split('\t')),
       appleScript: readFileSync(appleScriptFile, 'utf8'),
+      stdout: result.stdout,
     };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 }
+
+test('a stored Codex route opens the exact chat without the original hook environment', () => {
+  assert.equal(focus({ CODEX_INTERNAL_ORIGINATOR_OVERRIDE: 'Codex Desktop' }, ['--target', iTermSession]).stdout,
+    `chat ${iTermSession} com.openai.codex\n`);
+  assert.deepEqual(focus({}, ['--open', 'chat', iTermSession, 'com.openai.codex']).calls, [
+    ['open', '-b', 'com.openai.codex', `codex://threads/${iTermSession}`],
+  ]);
+});
+
+test('route opening rejects malformed chat IDs and mismatched applications', () => {
+  for (const id of [`${iTermSession}?view=review`, `${iTermSession}\nanything`, '../', '--args']) {
+    assert.deepEqual(focus({}, ['--open', 'chat', id, 'com.openai.codex']).calls, []);
+  }
+  assert.deepEqual(focus({}, ['--open', 'pane', iTermSession, 'com.openai.codex']).calls, []);
+});
+
+test('a failed Codex chat link falls back to app activation', () => {
+  assert.deepEqual(focus({ FOCUS_TEST_LINK_EXIT: '1' }, ['--open', 'chat', iTermSession, 'com.openai.codex']).calls, [
+    ['open', '-b', 'com.openai.codex', `codex://threads/${iTermSession}`],
+    ['open', '-b', 'com.openai.codex'],
+  ]);
+});
+
+test('one dispatcher opens the selected completed chat and ignores stale or repeated requests', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'inad-dispatch-test-'));
+  try {
+    const seconds = 1_800_000_000;
+    const now = seconds * 1000;
+    writeFileSync(join(dir, 'token'), 'isolated-test-pairing-token');
+    writeFileSync(join(dir, 'run.11'), `waiting done codex ${now} older ${now} chat ${iTermSession} com.openai.codex -\n`);
+    writeFileSync(join(dir, 'run.22'), `working prompt codex ${now} newer ${now} chat a1234567-b123-c123-d123-e12345678902 com.openai.codex -\n`);
+    writeFileSync(join(dir, 'sent.11'), 'older');
+    writeFileSync(join(dir, 'sent.22'), 'newer');
+    writeFileSync(join(dir, 'wait.11'), 'old listener');
+    writeFileSync(join(dir, 'uname'), '#!/bin/sh\nprintf Darwin\n', { mode: 0o755 });
+    writeFileSync(join(dir, 'date'), `#!/bin/sh\nprintf '%s\\n' ${seconds}\n`, { mode: 0o755 });
+    writeFileSync(join(dir, 'sleep'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+    writeFileSync(join(dir, 'open'), '#!/bin/sh\nprintf "%s\\n" "$*" >> "$INAD_HOME/focus-calls"\n', { mode: 0o755 });
+    writeFileSync(join(dir, 'curl'), `#!/bin/sh
+if [ -f "$INAD_HOME/count" ]; then read -r count < "$INAD_HOME/count"; fi
+count=$((\${count:-0} + 1))
+printf '%s\\n' "$count" > "$INAD_HOME/count"
+case "$count" in
+  1) printf '{"seq":1,"attached":true,"focusAt":${now - 60_000},"focusRun":"22"}' ;;
+  2|3) printf '{"seq":%s,"attached":true,"focusAt":${now},"focusRun":"11"}' "$count" ;;
+  *) : > "$INAD_HOME/off" ;;
+esac
+`, { mode: 0o755 });
+    const result = spawnSync('/bin/sh', [resolve('plugin/scripts/state.sh'), '--listen'], {
+      encoding: 'utf8', timeout: 15000,
+      env: { NODE_ENV: 'test', PATH: `${dir}:/usr/bin:/bin`, INAD_HOME: dir },
+    });
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readFileSync(join(dir, 'count'), 'utf8'), '4\n');
+    assert.equal(readFileSync(join(dir, 'focus-calls'), 'utf8'), `-b com.openai.codex codex://threads/${iTermSession}\n`);
+    assert.throws(() => readFileSync(join(dir, 'wait.11')));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test('Codex Desktop returns to its app without terminal environment variables', () => {
   assert.deepEqual(focus({ CODEX_INTERNAL_ORIGINATOR_OVERRIDE: 'Codex Desktop' }).calls, [

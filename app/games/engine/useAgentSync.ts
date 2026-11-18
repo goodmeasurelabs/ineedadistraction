@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { AgentRunSnapshot, AgentSnapshot } from '../../lib/agentSession';
 
 // Agent Mode on the page side: once this browser is paired with a coding agent
 // (Codex / Claude Code plugin), long-poll the agent's state so the stage can
@@ -23,9 +24,12 @@ export type AgentSync = {
   waitedAt: number;
   /** Bumps on every state report, so effects can react to repeats. */
   seq: number;
+  runs: AgentRunSnapshot[];
+  foregroundRun: string | null;
+  notice: AgentRunSnapshot | null;
 };
 
-const INITIAL: AgentSync = { paired: false, state: 'unpaired', reason: null, agent: null, working: 0, waiting: 0, waitedAt: 0, since: 0, seq: 0 };
+const INITIAL: AgentSync = { paired: false, state: 'unpaired', reason: null, agent: null, working: 0, waiting: 0, waitedAt: 0, since: 0, seq: 0, runs: [], foregroundRun: null, notice: null };
 
 export function readAgentToken(): string | null {
   try {
@@ -34,25 +38,29 @@ export function readAgentToken(): string | null {
   } catch { return null; }
 }
 
-// Ask the plugin to bring the waiting agent's terminal to the front. The page
-// cannot switch apps itself: the request goes through the server to the plugin,
-// which listens while its agent waits. False if the request could not be sent.
-export async function requestTerminalFocus(): Promise<boolean> {
+const QUEUE_UPDATED = 'inad:agent-queue-updated';
+type QueueTarget = Pick<AgentRunSnapshot, 'run' | 'revision'>;
+
+export async function updateAgentQueue(
+  action: 'ack' | 'dismiss' | 'focus' | 'clear',
+  target?: QueueTarget,
+  items?: QueueTarget[],
+): Promise<void> {
   const token = readAgentToken();
-  if (!token) return false;
-  try {
-    const response = await fetch(`/api/agent/${token}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'focus' }),
-    });
-    return response.ok;
-  } catch { return false; }
+  if (!token) throw new Error('This browser needs to be paired again.');
+  const response = await fetch(`/api/agent/${token}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, ...target, ...(items ? { items } : {}) }),
+  });
+  if (!response.ok) {
+    if (response.status === 409) throw new Error('That chat changed. Try its updated entry.');
+    throw new Error('Could not reach your agent. Please try again.');
+  }
+  const snapshot: AgentSnapshot = await response.json();
+  window.dispatchEvent(new CustomEvent(QUEUE_UPDATED, { detail: snapshot }));
 }
 
-// The "Back to your agent" button: sends the request and owns the small status
-// line under it. When the switch works this window loses focus within a second
-// or so, so the "do it yourself" fallback only appears if we are still in
-// front several seconds later, and any note is dropped once focus leaves.
-export function useReturnToAgent(): { note: string; back: () => Promise<void>; clear: () => void } {
+export function useReturnToAgent() {
   const [note, setNote] = useState('');
   const timer = useRef(0);
   const clear = useCallback(() => { window.clearTimeout(timer.current); setNote(''); }, []);
@@ -60,13 +68,19 @@ export function useReturnToAgent(): { note: string; back: () => Promise<void>; c
     window.addEventListener('blur', clear);
     return () => { window.removeEventListener('blur', clear); window.clearTimeout(timer.current); };
   }, [clear]);
-  const back = useCallback(async () => {
+  const back = useCallback(async (target: QueueTarget) => {
     window.clearTimeout(timer.current);
-    setNote('Bringing your terminal forward…');
-    if (!(await requestTerminalFocus())) { setNote('Could not reach the plugin. Switch to your terminal yourself.'); return; }
-    timer.current = window.setTimeout(() => {
-      setNote(document.hasFocus() ? 'Still here? Switch to your terminal yourself. This button needs the latest plugin, on a Mac.' : '');
-    }, 5000);
+    setNote('Opening your agent…');
+    try {
+      await updateAgentQueue('focus', target);
+      timer.current = window.setTimeout(() => {
+        setNote(document.hasFocus() ? 'Still here? Open your agent manually. Its return connection may have ended.' : '');
+      }, 5000);
+      return true;
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : 'Could not open your agent.');
+      return false;
+    }
   }, []);
   return { note, back, clear };
 }
@@ -82,6 +96,19 @@ export function useAgentSync(): AgentSync {
     const controller = new AbortController();
     setSync((s) => ({ ...s, paired: true }));
 
+    const accept = (data: AgentSnapshot) => {
+      if (!alive || data.seq < seqRef.current) return;
+      seqRef.current = data.seq;
+      setSync((prev) => ({
+        paired: true, state: data.state, reason: data.reason ?? null, agent: data.agent ?? null,
+        working: Number(data.working) || 0, waiting: Number(data.waiting) || 0,
+        waitedAt: Number(data.waitedAt) || 0, seq: data.seq,
+        since: prev.state === data.state ? prev.since : Date.now(),
+        runs: data.runs ?? [], foregroundRun: data.foregroundRun ?? null, notice: data.notice ?? null,
+      }));
+    };
+    const onUpdate = (event: Event) => accept((event as CustomEvent<AgentSnapshot>).detail);
+    window.addEventListener(QUEUE_UPDATED, onUpdate);
     const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
     (async () => {
       while (alive) {
@@ -91,15 +118,7 @@ export function useAgentSync(): AgentSync {
           if (!response.ok) throw new Error(String(response.status));
           const data = await response.json();
           if (!alive) return;
-          seqRef.current = data.seq;
-          // Expiry can change the state without a new report or sequence.
-          setSync((prev) => (
-            prev.seq === data.seq && prev.state === data.state ? prev : {
-              paired: true, state: data.state, reason: data.reason ?? null, agent: data.agent ?? null,
-              working: Number(data.working) || 0, waiting: Number(data.waiting) || 0, waitedAt: Number(data.waitedAt) || 0,
-              since: prev.state === data.state ? prev.since : Date.now(), seq: data.seq,
-            }
-          ));
+          accept(data);
           // Nothing reported yet: the first poll returns straight away, so wait before asking again.
           if (data.state === 'unpaired') await sleep(2500);
         } catch {
@@ -109,7 +128,7 @@ export function useAgentSync(): AgentSync {
       }
     })();
 
-    return () => { alive = false; controller.abort(); };
+    return () => { alive = false; controller.abort(); window.removeEventListener(QUEUE_UPDATED, onUpdate); };
   }, []);
 
   return sync;
