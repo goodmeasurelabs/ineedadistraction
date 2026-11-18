@@ -1,11 +1,20 @@
 #!/bin/sh
-# Bring the terminal this agent runs in back to the front (macOS only).
-# Called by wait.sh when the user clicks "Back to your agent" in the game. It
-# relies on the environment the agent's hooks inherit from the terminal:
+# Bring this agent's app back to the front (macOS only).
+# Called by wait.sh when the user clicks "Back to your agent" in the game.
+# Codex Desktop's hook process identifies itself with
+# CODEX_INTERNAL_ORIGINATOR_OVERRIDE, but does not inherit the terminal's
+# __CFBundleIdentifier. Check that explicit host before any stale terminal
+# variables inherited when the desktop app was launched from a shell.
+# Terminal agents use:
 #   __CFBundleIdentifier  which app the terminal is (set by macOS)
 #   ITERM_SESSION_ID      which iTerm tab and pane, so that one is selected
 # In other terminals the app comes forward on whichever tab it last showed.
 [ "$(uname)" = "Darwin" ] || exit 0
+
+if [ "$CODEX_INTERNAL_ORIGINATOR_OVERRIDE" = "Codex Desktop" ]; then
+  open -b com.openai.codex 2>/dev/null
+  exit 0
+fi
 
 if [ "$TERM_PROGRAM" = "iTerm.app" ]; then
   ID=${ITERM_SESSION_ID#*:}

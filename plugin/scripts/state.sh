@@ -116,8 +116,8 @@ if [ "$STATE" = "--send" ]; then
   exit 0
 fi
 
-# Hook input arrives as JSON on stdin. We only look for the session id (to open
-# the game at most once per session) and the tool name (see "resume" below).
+# Hook input arrives as JSON on stdin. We only inspect routing metadata: the
+# session, event, tool and sampling kind. Never prompts or tool arguments.
 INPUT=""
 if [ ! -t 0 ]; then INPUT=$(cat 2>/dev/null); fi
 # Take the first match: the hook's own fields come before any tool input,
@@ -154,6 +154,29 @@ SESSION=$(field session_id)
 SID=$(printf '%s' "$SESSION" | cksum 2>/dev/null | cut -d' ' -f1)
 [ -n "$SESSION" ] && [ -n "$SID" ] || SID=0
 LAST=$(cat "$DIR/run.$SID" 2>/dev/null)
+EVENT=$(field hook_event_name)
+TOOL=$(field tool_name)
+QUESTIONS="$DIR/questions.$SID"
+SYNC_QUESTION="$DIR/question-sync.$SID"
+
+if [ "$AGENT" = "codex" ]; then
+  # Async questions return before the human answers. Keep only their call ids,
+  # counts and answered indices locally; a tool finishing is not an answer.
+  if [ "$EVENT" = "UserPromptSubmit" ] || [ "$STATE" = "idle" ]; then
+    rm -rf "$QUESTIONS" 2>/dev/null
+    rm -f "$SYNC_QUESTION" 2>/dev/null
+  elif [ "$EVENT" = "PreToolUse" ] && [ "$TOOL" = "request_user_input" ] &&
+       [ "$STATE" = "waiting" ] && [ "$REASON" = "question" ]; then
+    touch "$SYNC_QUESTION" 2>/dev/null
+  elif [ "$EVENT" = "PreToolUse" ] && [ "$TOOL" = "request_user_input_async" ] &&
+       [ "$STATE" = "waiting" ] && [ "$REASON" = "question" ]; then
+    mkdir -p "$QUESTIONS" 2>/dev/null
+    if ! printf '%s' "$INPUT" | python3 "$HERE/codex-context.py" register "$QUESTIONS" 2>/dev/null; then
+      # Unknown metadata must not make us hide a real question.
+      touch "$QUESTIONS/unknown" 2>/dev/null
+    fi
+  fi
+fi
 
 # The user just sent a prompt: put the game in front of them now, before the
 # report below and whatever the server says. Only on macOS, where the game is
@@ -165,10 +188,40 @@ if [ "$STATE" = "working" ] && [ "$(uname)" = "Darwin" ] && [ ! -f "$DIR/no-auto
   ) </dev/null >/dev/null 2>&1 &
 fi
 if [ "$STATE" = "resume" ]; then
-  # Only meaningful right after a permission prompt or a question was answered.
-  case "$LAST" in "waiting permission"*|"waiting question"*) ;; *) finish ;; esac
-  # The question tool reports its own "waiting"; its pre-tool event is not a resume.
-  [ "$(field hook_event_name)" = "PreToolUse" ] && [ "$(field tool_name)" = "AskUserQuestion" ] && finish
+  # Question and generic pre-tool hooks run concurrently. Do not undo a
+  # question's waiting state before the question has even been shown.
+  if [ "$EVENT" = "PreToolUse" ]; then
+    case "$TOOL" in AskUserQuestion|request_user_input|request_user_input_async) finish ;; esac
+  fi
+  if [ "$AGENT" = "codex" ] && [ -f "$SYNC_QUESTION" ]; then
+    [ "$EVENT" = "PostToolUse" ] && [ "$TOOL" = "request_user_input" ] || finish
+    rm -f "$SYNC_QUESTION" 2>/dev/null
+  fi
+  if [ "$EVENT" = "PreModelRequest" ]; then
+    # A Codex Stop hook may continue the same turn without UserPromptSubmit.
+    # Only root sampling proves that its apparent completion was temporary:
+    # child agents and background/foreground compaction are separate work.
+    [ "$AGENT" = "codex" ] && [ "$(field kind)" = "sampling" ] &&
+      [ -z "$(field agent_id)" ] && [ -n "$SESSION" ] || finish
+    THREAD=$(field thread_id)
+    [ -z "$THREAD" ] || [ "$THREAD" = "$SESSION" ] || finish
+    case "$LAST" in
+      "waiting done codex") ;;
+      "waiting question codex") [ -d "$QUESTIONS" ] || finish ;;
+      *) finish ;;
+    esac
+  else
+    # Tool events resume after an answered permission prompt or question.
+    case "$LAST" in "waiting permission"*|"waiting question"*) ;; *) finish ;; esac
+    if [ "$LAST" = "waiting question codex" ] && [ ! -d "$QUESTIONS" ]; then
+      # Only the blocking question's own completion proves it was answered.
+      [ "$EVENT" = "PostToolUse" ] && [ "$TOOL" = "request_user_input" ] || finish
+    fi
+  fi
+  if [ "$AGENT" = "codex" ] && [ -d "$QUESTIONS" ]; then
+    PENDING=$(python3 "$HERE/codex-context.py" pending "$QUESTIONS" "$(field transcript_path)" 2>/dev/null)
+    [ "$PENDING" = "clear" ] || finish
+  fi
   STATE="working"; REASON="prompt"
 fi
 

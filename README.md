@@ -22,9 +22,17 @@ codex plugin marketplace add goodmeasurelabs/ineedadistraction
 codex plugin add distraction@ineedadistraction
 ```
 
-Then run `/hooks` in Codex once to review and trust the plugin's hooks.
+Then review and trust the plugin's hooks in **Settings > Hooks** in Codex Desktop, or run `/hooks` in Codex CLI. Updates to the plugin's scripts may require a new review.
 
 Send your agent any prompt and the arcade opens in your browser, already paired. Or ask it to "open my distraction".
+
+On macOS, the paused game's **Back to Codex** button brings Codex Desktop forward. For Codex CLI and Claude Code, the button brings the terminal forward (including the correct iTerm tab).
+
+Codex has its own hook configuration: ordinary tool calls keep the game running, questions pause it, and continued turns resume it if a Stop hook asks Codex to keep working. Background compaction and child-agent model requests do not resume a finished turn.
+
+Asynchronous Codex questions remain paused while other work continues. A local Python 3 helper matches question IDs to structured replies in the latest 16 MB of the local transcript. It stores only call IDs, question counts and answered indices; no question or answer text leaves the machine. This transcript format is a compatibility interface: if Python or the metadata is unavailable, the game stays paused until a fresh prompt instead of assuming the question was answered.
+
+Codex's permission hook fires before approval routing, so an automatic permission review can still briefly pause the game even when no human approval is needed. The turn's automatic-review setting alone cannot safely filter these events: some commands and connected-app requests can still require a human. The plugin therefore preserves permission notifications.
 
 **What the plugin sends:** the word `working`, `waiting` or `idle`; a one-word reason; which agent it is; a checksum of the session id (so several agents can be told apart); and a random pairing token generated on your machine. Never prompts, file paths, code or tool input. Source: [`plugin/scripts/state.sh`](plugin/scripts/state.sh).
 

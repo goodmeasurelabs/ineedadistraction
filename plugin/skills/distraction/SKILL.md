@@ -19,7 +19,7 @@ If no browser can be opened (remote shell, container), run `open.sh --print` and
 
 ## Getting back to the agent
 
-When the agent finishes or needs the user, the paused game shows a "Back to Claude Code" (or Codex) button. Clicking it brings the terminal to the front; in iTerm it also selects the tab that agent is running in. If several agents are waiting, it goes to the one that stopped most recently. This works on macOS, for up to 30 minutes after the agent stops.
+When the agent finishes or needs the user, the paused game shows a "Back to Claude Code" (or Codex) button. Clicking it brings Codex Desktop to the front when the agent runs there. For Claude Code or Codex CLI, it brings the terminal to the front; in iTerm it also selects the tab that agent is running in. If several agents are waiting, it goes to the one that stopped most recently. This works on macOS, for up to 30 minutes after the agent stops.
 
 ## Controls
 
@@ -40,6 +40,10 @@ State lives in `~/.config/ineedadistraction/`.
 1. Check that the hooks are active: `/hooks` in Codex (plugin hooks must be reviewed and trusted once), `/hooks` in Claude Code.
 2. Run `sh <plugin>/scripts/state.sh working prompt test` then `cat ~/.config/ineedadistraction/last`; it should read `working prompt test`.
 3. Confirm the machine can reach `https://www.ineedadistraction.com`.
+
+Codex uses `hooks/codex.json`, declared in its plugin manifest. It pauses for `request_user_input` and `request_user_input_async` questions and Stop events. Asynchronous questions stay paused after the tool returns and while unrelated work continues. A local Python 3 helper matches structured answers to the pending question IDs using the latest 16 MB of the transcript, retaining only IDs, question counts and answered indices. The transcript format is not a stable API; if Python or the metadata is unavailable, the pause remains until a fresh user prompt.
+
+If another Stop hook continues the turn, the next root sampling request restores the working state; compaction and child model requests do not. Codex's `PermissionRequest` event occurs before automatic approval review, so a short permission pause does not necessarily mean the user must approve something. Neither the hook payload nor the turn's automatic-review setting can reliably distinguish all cases: human-only command rules and connected-app settings can override that mode. Preserve permission notifications rather than suppressing a possible human request.
 
 ## What is sent
 
