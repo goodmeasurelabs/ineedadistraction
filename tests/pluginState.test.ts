@@ -31,6 +31,7 @@ exec /bin/sh "$@"
     event(event: string, fields: Record<string, unknown> = {}, reverse = false) {
       const input = {
         session_id: 'root-session',
+        turn_id: 'test-turn',
         transcript_path: agent === 'codex' ? transcript : '/isolated/.claude/transcript.jsonl',
         hook_event_name: event,
         ...fields,
@@ -62,6 +63,11 @@ exec /bin/sh "$@"
       appendFileSync(transcript, JSON.stringify({
         type: 'response_item',
         payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: `<send_user_message_question_reply>\n${JSON.stringify(reply)}\n</send_user_message_question_reply>` }] },
+      }) + '\n');
+    },
+    approvalMode(reviewer: string, policy = 'on-request') {
+      appendFileSync(transcript, JSON.stringify({
+        type: 'turn_context', payload: { turn_id: 'test-turn', approvals_reviewer: reviewer, approval_policy: policy },
       }) + '\n');
     },
     close() { rmSync(dir, { recursive: true, force: true }); },
@@ -163,6 +169,39 @@ test('permission prompts still pause and tool completion clears them', () => {
     assert.equal(s.event('PermissionRequest', { tool_name: 'Bash' }), 'waiting permission codex');
     assert.equal(s.event('PostToolUse', { tool_name: 'Bash' }), 'working prompt codex');
   } finally { s.close(); }
+});
+
+test('automatic Codex shell approvals keep working while questions and final replies still pause', () => {
+  const s = session();
+  try {
+    s.approvalMode('auto_review');
+    s.event('UserPromptSubmit');
+    for (const tool_name of ['Bash', 'apply_patch', 'exec_command']) {
+      assert.equal(s.event('PermissionRequest', { tool_name }), 'working prompt codex');
+    }
+    const question = { tool_name: 'request_user_input_async', tool_use_id: 'call_auto', tool_input: { questions: [{ title: 'Continue?' }] } };
+    assert.equal(s.event('PreToolUse', question), 'waiting question codex');
+    assert.equal(s.event('PermissionRequest', { tool_name: 'Bash' }), 'waiting question codex');
+    s.answer('call_auto');
+    assert.equal(s.event('PostToolUse', { tool_name: 'Bash' }), 'working prompt codex');
+    assert.equal(s.event('Stop'), 'waiting done codex');
+  } finally { s.close(); }
+});
+
+test('manual Codex checks, app approvals, and Claude permissions retain their pauses', () => {
+  for (const example of [
+    { agent: 'codex' as const, reviewer: 'user', tool: 'Bash' },
+    { agent: 'codex' as const, reviewer: 'auto_review', tool: 'mcp__example__write' },
+    { agent: 'codex' as const, reviewer: 'auto_review', tool: 'request_permissions' },
+    { agent: 'claude' as const, reviewer: 'auto_review', tool: 'Bash' },
+  ]) {
+    const s = session(example.agent);
+    try {
+      s.approvalMode(example.reviewer);
+      s.event('UserPromptSubmit');
+      assert.equal(s.event('PermissionRequest', { tool_name: example.tool }), `waiting permission ${example.agent === 'codex' ? 'codex' : 'claude-code'}`);
+    } finally { s.close(); }
+  }
 });
 
 test('Codex sampling recovery leaves real input waits and Claude state alone', () => {

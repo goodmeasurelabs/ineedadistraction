@@ -35,6 +35,13 @@ function fixture() {
       writeFileSync(transcript, events.map((event) => JSON.stringify(event)).join('\n') + '\n');
     },
     pending() { return invoke(['pending', questions, transcript]).stdout.trim(); },
+    approval(fields: Record<string, unknown> = {}) {
+      return invoke(['approval'], {
+        hook_event_name: 'PermissionRequest', tool_name: 'Bash', permission_mode: 'default',
+        turn_id: 'turn_current', transcript_path: transcript,
+        ...fields,
+      }).stdout.trim();
+    },
     marker(callId: string) { return JSON.parse(readFileSync(join(questions, `${callId}.json`), 'utf8')); },
     close() { rmSync(root, { recursive: true, force: true }); },
   };
@@ -174,5 +181,129 @@ test('bounded tail tolerates a cut JSON line and processes recent replies', () =
     writeFileSync(f.transcript, JSON.stringify({ type: 'unrelated', padding: 'x'.repeat(17 * 1024 * 1024) }) + '\n'
       + JSON.stringify(reply('call_recent', 0)) + '\n');
     assert.equal(f.pending(), 'clear');
+  } finally { f.close(); }
+});
+
+function turnContext(fields: Record<string, unknown> = {}) {
+  return {
+    type: 'turn_context',
+    payload: { turn_id: 'turn_current', approvals_reviewer: 'auto_review', approval_policy: 'on-request', ...fields },
+  };
+}
+
+test('explicit no-prompt hook modes suppress only native game permission notifications', () => {
+  const f = fixture();
+  try {
+    for (const permission_mode of ['dontAsk', 'bypassPermissions']) {
+      for (const tool_name of ['Bash', 'apply_patch', 'exec_command']) {
+        assert.equal(f.approval({ permission_mode, tool_name }), 'automatic');
+      }
+      for (const tool_name of ['mcp__service__write', 'request_permissions', 'request_user_input', 'unrecognized']) {
+        assert.equal(f.approval({ permission_mode, tool_name }), 'notify');
+      }
+      assert.equal(f.approval({ permission_mode, hook_event_name: 'PreToolUse' }), 'notify');
+    }
+  } finally { f.close(); }
+});
+
+test('exact current turn automatic review suppresses native notifications, while app overrides remain visible', () => {
+  const f = fixture();
+  try {
+    f.write([turnContext()]);
+    for (const tool_name of ['Bash', 'apply_patch', 'exec_command']) {
+      assert.equal(f.approval({ tool_name }), 'automatic');
+    }
+    for (const tool_name of ['mcp__service__write', 'request_permissions', '', null]) {
+      assert.equal(f.approval({ tool_name }), 'notify');
+    }
+    for (const permission_mode of ['default', 'acceptEdits', 'plan', null]) {
+      assert.equal(f.approval({ permission_mode }), 'automatic');
+    }
+    for (const permission_mode of ['unknown', '', true, 1, {}]) {
+      assert.equal(f.approval({ permission_mode }), 'notify');
+    }
+    assert.deepEqual(readdirSync(f.root), ['transcript.jsonl']);
+  } finally { f.close(); }
+});
+
+test('manual reviewers and unsupported approval policies keep permission notifications', () => {
+  const f = fixture();
+  try {
+    for (const approvals_reviewer of ['user', 'human', 'unknown', null, 1]) {
+      f.write([turnContext({ approvals_reviewer })]);
+      assert.equal(f.approval(), 'notify');
+    }
+    for (const approval_policy of ['on-failure', 'untrusted', 'unknown', null, { granular: true }]) {
+      f.write([turnContext({ approval_policy })]);
+      assert.equal(f.approval(), 'notify');
+    }
+    f.write([{ type: 'turn_context', payload: { turn_id: 'turn_current' } }]);
+    assert.equal(f.approval(), 'notify');
+  } finally { f.close(); }
+});
+
+test('never approval policy does not ask even when the reviewer is user', () => {
+  const f = fixture();
+  try {
+    f.write([turnContext({ approval_policy: 'never', approvals_reviewer: 'user' })]);
+    assert.equal(f.approval(), 'automatic');
+  } finally { f.close(); }
+});
+
+test('approval context must be the latest exact turn, not an older matching automatic turn', () => {
+  const f = fixture();
+  try {
+    f.write([turnContext(), turnContext({ turn_id: 'turn_newer' })]);
+    assert.equal(f.approval(), 'notify');
+    assert.equal(f.approval({ turn_id: 'turn_newer' }), 'automatic');
+    f.write([turnContext(), turnContext({ approvals_reviewer: 'user' })]);
+    assert.equal(f.approval(), 'notify');
+    f.write([turnContext(), { type: 'turn_context', payload: null }]);
+    assert.equal(f.approval(), 'notify');
+    for (const turn_id of ['turn_newer', undefined]) {
+      f.write([turnContext(), { type: 'event_msg', payload: { type: 'task_started', turn_id } }]);
+      assert.equal(f.approval(), 'notify');
+    }
+    f.write([
+      { type: 'event_msg', payload: { type: 'task_started', turn_id: 'turn_current' } },
+      turnContext(),
+    ]);
+    assert.equal(f.approval(), 'automatic');
+  } finally { f.close(); }
+});
+
+test('missing, malformed and incomplete approval metadata conservatively notifies', () => {
+  const f = fixture();
+  try {
+    assert.equal(f.approval(), 'notify'); // Missing transcript.
+    for (const text of ['', '{', '[]\n', JSON.stringify(turnContext()) + '\n{"type":"turn_context"']) {
+      writeFileSync(f.transcript, text);
+      assert.equal(f.approval(), 'notify');
+    }
+    f.write([turnContext()]);
+    for (const fields of [
+      { turn_id: '' }, { turn_id: null }, { turn_id: 'turn_old' },
+      { transcript_path: '' }, { transcript_path: null }, { transcript_path: join(f.root, 'missing') },
+    ]) {
+      assert.equal(f.approval(fields), 'notify');
+    }
+    assert.equal(f.invoke(['approval'], null).stdout.trim(), 'notify');
+    assert.equal(f.invoke(['approval'], []).stdout.trim(), 'notify');
+    const malformed = spawnSync('python3', [helper, 'approval'], {
+      input: '{' + privateText, encoding: 'utf8', timeout: 5000,
+    });
+    assert.equal(malformed.stdout.trim(), 'notify');
+    assert.equal(malformed.stderr, '');
+  } finally { f.close(); }
+});
+
+test('approval lookup ignores contexts outside the bounded tail and accepts recent complete context', () => {
+  const f = fixture();
+  try {
+    const padding = JSON.stringify({ type: 'unrelated', padding: 'x'.repeat(17 * 1024 * 1024) }) + '\n';
+    writeFileSync(f.transcript, JSON.stringify(turnContext()) + '\n' + padding);
+    assert.equal(f.approval(), 'notify');
+    writeFileSync(f.transcript, padding + JSON.stringify(turnContext()) + '\n');
+    assert.equal(f.approval(), 'automatic');
   } finally { f.close(); }
 });

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Track Codex async-question routing metadata locally; never retain answer text.
+"""Read Codex routing metadata locally; never retain prompts or answer text.
 
 The transcript wrapper is a compatibility interface, not a stable Codex API.
-Unknown or missing evidence leaves questions pending.
+Unknown evidence leaves questions pending and permission notifications enabled.
 """
 
 import contextlib
@@ -21,6 +21,7 @@ TAIL_BYTES = 16 * 1024 * 1024
 INPUT_BYTES = 1024 * 1024
 OPEN_TAG = "<send_user_message_question_reply>"
 CLOSE_TAG = "</send_user_message_question_reply>"
+NATIVE_APPROVAL_TOOLS = {"Bash", "apply_patch", "exec_command"}
 
 
 @contextlib.contextmanager
@@ -71,11 +72,18 @@ def read_marker(path):
             "answered_indices": sorted(set(answered))}
 
 
-def register(directory):
+def hook_input():
     raw = sys.stdin.buffer.read(INPUT_BYTES + 1)
     if len(raw) > INPUT_BYTES:
         raise ValueError("hook input too large")
     event = json.loads(raw)
+    if not isinstance(event, dict):
+        raise ValueError("invalid hook input")
+    return event
+
+
+def register(directory):
+    event = hook_input()
     call_id = event.get("tool_use_id")
     questions = event.get("tool_input", {}).get("questions")
     if (not isinstance(call_id, str) or not CALL_ID.fullmatch(call_id)
@@ -93,7 +101,7 @@ def register(directory):
         write_marker(path, marker)
 
 
-def transcript_items(path):
+def transcript_records(path, strict=False):
     with path.open("rb") as source:
         source.seek(0, os.SEEK_END)
         size = source.tell()
@@ -107,11 +115,70 @@ def transcript_items(path):
         try:
             event = json.loads(line)
         except (ValueError, UnicodeError, RecursionError):
+            if strict:
+                raise ValueError("unreadable transcript metadata") from None
             continue
-        if isinstance(event, dict) and event.get("type") == "response_item":
+        if isinstance(event, dict):
+            yield event
+        elif strict:
+            raise ValueError("invalid transcript record")
+
+
+def transcript_items(path):
+    for event in transcript_records(path):
+        if event.get("type") == "response_item":
             payload = event.get("payload")
             if isinstance(payload, dict):
                 yield payload
+
+
+def approval():
+    """Choose a game notification, never an operation's approval decision.
+
+    Human-only command/category overrides are not exposed by these hooks and
+    may still require Codex's native approval prompt in automatic-review mode.
+    MCP/app reviewers can override the turn setting, so always notify for them.
+    """
+    event = hook_input()
+    if (event.get("hook_event_name") != "PermissionRequest"
+            or event.get("tool_name") not in NATIVE_APPROVAL_TOOLS):
+        return "notify"
+    mode = event.get("permission_mode")
+    if mode in ("dontAsk", "bypassPermissions"):
+        return "automatic"
+    if mode not in (None, "default", "acceptEdits", "plan"):
+        return "notify"
+
+    turn_id = event.get("turn_id")
+    transcript = event.get("transcript_path")
+    if not isinstance(turn_id, str) or not turn_id.strip():
+        return "notify"
+    if not isinstance(transcript, str) or not transcript.strip():
+        return "notify"
+
+    latest = None
+    started_turn = None
+    saw_start = False
+    for record in transcript_records(Path(transcript), strict=True):
+        payload = record.get("payload")
+        if record.get("type") == "turn_context":
+            # A malformed/newer context must replace rather than reveal an
+            # older automatic context for this hook's stale turn.
+            latest = payload if isinstance(payload, dict) else None
+        elif record.get("type") == "event_msg" and isinstance(payload, dict):
+            if payload.get("type") == "task_started":
+                saw_start = True
+                started_turn = payload.get("turn_id")
+    if not latest or latest.get("turn_id") != turn_id:
+        return "notify"
+    if saw_start and started_turn != turn_id:
+        return "notify"
+    policy = latest.get("approval_policy")
+    if policy == "never":
+        return "automatic"
+    if policy == "on-request" and latest.get("approvals_reviewer") == "auto_review":
+        return "automatic"
+    return "notify"
 
 
 def reply_indices(payload):
@@ -203,6 +270,9 @@ def pending(directory, transcript):
 def main():
     os.umask(0o077)
     try:
+        if len(sys.argv) == 2 and sys.argv[1] == "approval":
+            print(approval())
+            return 0
         if len(sys.argv) == 3 and sys.argv[1] == "register":
             register(Path(sys.argv[2]))
             return 0
@@ -214,6 +284,8 @@ def main():
     # No exception text: it could include a path or untrusted transcript content.
     if len(sys.argv) > 1 and sys.argv[1] == "pending":
         print("pending")
+    elif len(sys.argv) > 1 and sys.argv[1] == "approval":
+        print("notify")
     return 1
 
 

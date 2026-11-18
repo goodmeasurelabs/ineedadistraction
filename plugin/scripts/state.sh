@@ -141,6 +141,14 @@ finish() { [ "$REASON" = "done" ] && printf '{}'; exit 0; }
 [ -f "$DIR/off" ] && finish
 case "$STATE" in working|waiting|idle|resume) ;; *) finish ;; esac
 
+if [ "$AGENT" = "codex" ] && [ "$STATE" = "waiting" ] && [ "$REASON" = "permission" ]; then
+  # PermissionRequest precedes Codex's automatic reviewer. In automatic mode,
+  # a shell/patch check is not a reason to interrupt the game. This only changes
+  # our notification; Codex still makes and enforces the approval decision.
+  ROUTING=$(printf '%s' "$INPUT" | python3 "$HERE/codex-context.py" approval 2>/dev/null)
+  [ "$ROUTING" = "automatic" ] && finish
+fi
+
 umask 077
 mkdir -p "$DIR" 2>/dev/null || finish
 if [ ! -s "$DIR/token" ]; then
