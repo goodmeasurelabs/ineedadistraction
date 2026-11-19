@@ -115,8 +115,8 @@ export default function AgentClient() {
           <section className="pair-connected" aria-label="Paired computer controls">
             <div>
               <p className="pair-connected-label">THIS PAIRED COMPUTER</p>
-              <h2>{sync.pending ? 'Applying your change…' : sync.settings ? `Distractions ${sync.settings.enabled ? 'on' : 'off'}` : 'Checking your plugin…'}</h2>
-              <p>{sync.connected ? 'Your plugin is connected. You can update this computer here.' : 'Open the player through your agent to reconnect. You can still prepare a setup prompt below.'}</p>
+              <h2>{sync.loading ? 'Checking your plugin…' : sync.pending ? 'Applying your change…' : sync.settings ? `Distractions ${sync.settings.enabled ? 'on' : 'off'}` : sync.error ? 'Could not check your plugin' : 'Plugin update available'}</h2>
+              <p>{sync.connected ? 'Your plugin is connected. You can update this computer here.' : !sync.loading && !sync.settings && !sync.error ? 'Your games still work. Copy the setup prompt below to update your plugin and get the new controls.' : 'Open the player through your agent to reconnect. You can still prepare a setup prompt below.'}</p>
             </div>
             <div className="pair-connected-actions">
               <button type="button" className="pair-secondary" disabled={!sync.settings || sync.saving || (sync.settings.enabled === false && (!sync.connected || sync.pending))} onClick={toggleDistractions}>{sync.settings?.enabled === false ? 'Keep distracting' : 'Stop distracting'}</button>
