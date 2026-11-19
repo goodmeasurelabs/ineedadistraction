@@ -52,6 +52,8 @@ Settings apply to this paired computer across Codex and Claude Code. Local comma
 
 Website setup stays at `/agent`; the focused popup starts at `/arcade`. Its separate browser profile receives the chosen mix through the plugin. `open.sh` starts a settings listener even when Off or return-to-agent is disabled. It stops after five minutes without an attached player and restarts on explicit opening or a new prompt. `open.sh --print` only prints the link.
 
+To try the three-clip test, start a Codex or Claude Code turn and choose **Family Guy clips** in the paired Chromium popup. If the popup was already open before the update, close it and open it again through your agent. **Next clip** cycles through three official uploads in shuffled order. When a question or approval arrives, the video pauses. Choose **Resume clip** to continue from your place. **Stop distracting** also works while YouTube is loading.
+
 **Updating:** In Codex, run `codex plugin marketplace upgrade ineedadistraction`, then `codex plugin add distraction@ineedadistraction`. In Claude Code, run `claude plugin marketplace update ineedadistraction`, then `claude plugin update distraction@ineedadistraction`. Follow any client restart or hook-review instructions, then refresh the distraction popup once (Cmd+R / Ctrl+R) to load the new controls. Opening it again only brings the existing window forward. Older plugins can still play while being updated.
 
 Legacy approval records without event or return metadata become unconfirmed history after 30 minutes. They remain clearable, but do not interrupt new work. Current versioned approvals and questions retain their normal queue behavior.

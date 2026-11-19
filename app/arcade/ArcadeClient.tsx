@@ -2,54 +2,59 @@
 
 import { useEffect, useReducer, useRef, useState, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import GameClient from '../games/[slug]/GameClient';
 import { getGame } from '../games/registry';
-import { AGENT_TOKEN_KEY, readAgentToken, useAgentSync } from '../games/engine/useAgentSync';
+import { useAgentSync } from '../games/engine/useAgentSync';
 import { useDistractionSettings } from '../lib/useDistractionSettings';
 import { DEFAULT_DISTRACTION_PREFERENCES, getEligibleGames, parseDistractionPreferences, type DistractionPreferences } from '../lib/distractionPreferences';
 import DistractionPreferencesPicker from '../components/DistractionPreferencesPicker';
 import AgentQueue from '../components/AgentQueue';
 import { trackEvent } from '../lib/analytics';
 import { INITIAL_DISTRACTION_HOLD, distractionHoldReducer } from '../lib/distractionHold';
+import { initializeArcadePairing } from './popupSession';
 
 const DRAFT_KEY = 'inad:setup-preferences:v1';
+const FamilyGuyClips = dynamic(() => import('./clips/FamilyGuyClips'), {
+  loading: () => <p className="arcade-message" role="status">Opening clips…</p>,
+});
 
 export default function ArcadeClient() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
+  const [isPluginPopup, setIsPluginPopup] = useState(false);
   const [pairingError, setPairingError] = useState('');
 
   useEffect(() => {
     const fragment = new URLSearchParams(window.location.hash.slice(1));
-    const token = fragment.get('t');
-    if (token) {
+    const hasPairing = fragment.has('t') || fragment.has('popup');
+    if (hasPairing) {
       // Strip the credential before any analytics call or subsequent render.
       const cleanUrl = window.location.pathname + window.location.search;
       window.history.replaceState(null, '', cleanUrl);
       // Keep Next's canonical URL in sync so hydration cannot restore the hash.
       router.replace(cleanUrl, { scroll: false });
-      if (/^[A-Za-z0-9_-]{20,64}$/.test(token)) {
-        try {
-          localStorage.setItem(AGENT_TOKEN_KEY, token);
-          if (readAgentToken() !== token) throw new Error('Storage unavailable');
-          trackEvent('agent_pairing_link_opened', {});
-        } catch { setPairingError('This browser could not save the pairing. Allow site storage, then ask your agent to open your distraction again.'); }
-      } else setPairingError('That pairing link is incomplete. Ask your agent to open your distraction again.');
     }
+    const { popup, error } = initializeArcadePairing(fragment);
+    if (error === 'invalid') setPairingError('That pairing link is incomplete. Ask your agent to open your distraction again.');
+    else if (error === 'storage') setPairingError('This browser could not save the pairing. Allow site storage, then ask your agent to open your distraction again.');
+    else if (hasPairing) trackEvent('agent_pairing_link_opened', {});
+    setIsPluginPopup(popup);
     setReady(true);
   }, [router]);
 
   // Mount polling only after the fragment is consumed: the popup has a separate
   // browser profile, and may have no token at all on its first render.
   if (!ready) return <main className="arcade-loading"><span>✳</span><p>Opening your distraction…</p></main>;
-  return <Player pairingError={pairingError} />;
+  return <Player pairingError={pairingError} isPluginPopup={isPluginPopup} />;
 }
 
-function Player({ pairingError }: { pairingError: string }) {
-  const agent = useAgentSync();
-  const control = useDistractionSettings();
+function Player({ pairingError, isPluginPopup }: { pairingError: string; isPluginPopup: boolean }) {
+  const agent = useAgentSync(!pairingError);
+  const control = useDistractionSettings(!pairingError);
   const [guest, setGuest] = useState(DEFAULT_DISTRACTION_PREFERENCES);
   const [selected, setSelected] = useState<string | null>(null);
+  const [watchingClips, setWatchingClips] = useState(false);
   const [hold, dispatchHold] = useReducer(distractionHoldReducer, INITIAL_DISTRACTION_HOLD);
   const [customizing, setCustomizing] = useState(false);
   const [draft, setDraft] = useState(DEFAULT_DISTRACTION_PREFERENCES);
@@ -64,6 +69,9 @@ function Player({ pairingError }: { pairingError: string }) {
   const settingsUnavailable = control.paired && !control.loading && !control.settings && !!control.error;
   const basicPlayer = control.paired && !control.loading && !control.settings && !control.error;
   const notificationsEnabled = !off && !control.loading && !applying && !settingsUnavailable;
+  const clipsAvailable = isPluginPopup && !!control.settings;
+  const clipsActive = clipsAvailable && watchingClips;
+  const clipConnectionReady = control.connected && agent.connected;
 
   useEffect(() => {
     try {
@@ -139,13 +147,19 @@ function Player({ pairingError }: { pairingError: string }) {
     : !control.settings ? (basicPlayer ? 'Basic player · Update available' : 'Settings unavailable')
     : control.pending ? (preferences.enabled ? 'Applying your settings…' : 'Turning distractions off…')
     : preferences.enabled === false ? 'Distractions off'
-    : hold.held ? 'Game paused · Off not confirmed' : 'Distractions on';
+    : hold.held ? 'Paused · Off not confirmed' : 'Distractions on';
   const offConfirmed = control.settings?.enabled === false && !applying && !control.saving;
 
   return (
     <main className="arcade-shell">
       <header className="arcade-controls">
-        <div className="arcade-brand-row"><button className="arcade-brand" onClick={() => setSelected(null)} aria-label="Your game mix"><span aria-hidden="true">✳</span> distraction.</button><button className="arcade-customize" onClick={openSettings}>Change games</button></div>
+        <div className="arcade-brand-row">
+          <button className="arcade-brand" onClick={() => { setWatchingClips(false); setSelected(null); }} aria-label="Your game mix"><span aria-hidden="true">✳</span> distraction.</button>
+          {!clipsActive && <div className="arcade-choices">
+            {clipsAvailable && <button className="arcade-clips-choice" disabled={off || control.pending} onClick={() => { setNote(''); setWatchingClips(true); }}><span aria-hidden="true">▶</span> Family Guy clips</button>}
+            <button className="arcade-customize" onClick={openSettings}>Change games</button>
+          </div>}
+        </div>
         <div className="arcade-mode-row"><span className={off ? 'arcade-mode is-off' : 'arcade-mode'} role="status">{modeLabel}</span>{basicPlayer
           ? <a href="/agent" target="_blank" rel="noreferrer">Get the new controls</a>
           : control.paired
@@ -159,7 +173,15 @@ function Player({ pairingError }: { pairingError: string }) {
       {basicPlayer && <p className="arcade-message">Update your plugin to save on/off and game preferences. <a href="/agent" target="_blank" rel="noreferrer">Copy a setup prompt</a></p>}
 
       <div className="arcade-game-area">
-        {selected && getGame(selected) ? <GameClient key={selected} slug={selected} allowedSlugs={eligible.map((game) => game.slug)} arcade={{
+        {clipsActive ? <div className="arcade-watch">
+          {notificationsEnabled && <AgentQueue agent={agent} resumeLabel="Back to clips" onStopDistractions={() => void setEnabled(false)} />}
+          {!clipConnectionReady && !off && <p className="arcade-message" role="status">
+            {control.connected && agent.state === 'unpaired'
+              ? 'Waiting for your first turn. Send a prompt to Codex or Claude Code.'
+              : 'Clip paused while your agent reconnects.'}
+          </p>}
+          <FamilyGuyClips suspended={!notificationsEnabled || control.saving || !clipConnectionReady || !!agent.notice} sound={preferences.sound} onBack={() => setWatchingClips(false)} />
+        </div> : selected && getGame(selected) ? <GameClient key={selected} slug={selected} allowedSlugs={eligible.map((game) => game.slug)} arcade={{
           agent, suspended: off || customizing || control.loading || applying || settingsUnavailable,
           notificationsEnabled: notificationsEnabled && !customizing,
           sound: preferences.sound, onSoundChange: soundChanged,
@@ -179,8 +201,9 @@ function Player({ pairingError }: { pairingError: string }) {
         </div>}
 
         {off && <section className="arcade-off" aria-label="Distractions off" role="status">
-          <span className="arcade-off-mark" aria-hidden="true">Ⅱ</span><h1>{offConfirmed ? 'Distractions are off.' : control.pending ? 'Turning distractions off…' : 'Your game is paused.'}</h1>
-          <p>{offConfirmed ? 'No automatic popups until you turn them back on. Your game and your mix are saved.' : 'This game is paused. Automatic popups are off only after your plugin confirms the change.'}</p>
+          <span className="arcade-off-mark" aria-hidden="true">Ⅱ</span><h1>{offConfirmed ? 'Distractions are off.' : control.pending ? 'Turning distractions off…' : clipsActive ? 'Your clip is paused.' : 'Your game is paused.'}</h1>
+          <p>{offConfirmed ? 'No automatic popups until you turn them back on.' : 'Waiting for your plugin to confirm that automatic popups are off.'}</p>
+          {!offConfirmed && !control.pending && control.settings?.enabled && <button onClick={() => void setEnabled(false)}>Retry stop</button>}
           <button disabled={control.pending} onClick={() => void setEnabled(true)}>Keep distracting</button>
           <p className="arcade-off-hint">Or tell your agent “Keep distracting”.</p>
         </section>}

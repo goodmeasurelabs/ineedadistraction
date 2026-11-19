@@ -2,15 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AgentRunSnapshot, AgentSnapshot } from '../../lib/agentSession';
+import { readAgentToken } from '../../arcade/popupSession';
 
 // Agent Mode on the page side: once this browser is paired with a coding agent
 // (Codex / Claude Code plugin), long-poll the agent's state so the stage can
 // pause the moment the agent needs its human.
 
-export const AGENT_TOKEN_KEY = 'inad:agent-token';
+export { AGENT_TOKEN_KEY, readAgentToken } from '../../arcade/popupSession';
 
 export type AgentSync = {
   paired: boolean;
+  /** The plugin has reported an agent session and its queue is reachable. */
+  connected: boolean;
   /** 'unpaired' until the plugin has reported at least once. */
   state: 'working' | 'waiting' | 'idle' | 'unpaired';
   reason: string | null;
@@ -29,14 +32,7 @@ export type AgentSync = {
   notice: AgentRunSnapshot | null;
 };
 
-const INITIAL: AgentSync = { paired: false, state: 'unpaired', reason: null, agent: null, working: 0, waiting: 0, waitedAt: 0, since: 0, seq: 0, runs: [], foregroundRun: null, notice: null };
-
-export function readAgentToken(): string | null {
-  try {
-    const token = localStorage.getItem(AGENT_TOKEN_KEY);
-    return token && /^[A-Za-z0-9_-]{20,64}$/.test(token) ? token : null;
-  } catch { return null; }
-}
+const INITIAL: AgentSync = { paired: false, connected: false, state: 'unpaired', reason: null, agent: null, working: 0, waiting: 0, waitedAt: 0, since: 0, seq: 0, runs: [], foregroundRun: null, notice: null };
 
 const QUEUE_UPDATED = 'inad:agent-queue-updated';
 type QueueTarget = Pick<AgentRunSnapshot, 'run' | 'revision'>;
@@ -132,10 +128,10 @@ export function useAgentSync(enabled = true): AgentSync {
     setSync((s) => ({ ...s, paired: true }));
 
     const accept = (data: AgentPollSnapshot) => {
-      if (!alive || data.seq < seqRef.current) return;
-      seqRef.current = data.seq;
+      if (!alive || (data.state !== 'unpaired' && data.seq < seqRef.current)) return;
+      seqRef.current = data.state === 'unpaired' ? -1 : data.seq;
       setSync((prev) => ({
-        paired: true, state: data.state, reason: data.reason ?? null, agent: data.agent ?? null,
+        paired: true, connected: data.state !== 'unpaired', state: data.state, reason: data.reason ?? null, agent: data.agent ?? null,
         working: Number(data.working) || 0, waiting: Number(data.waiting) || 0,
         waitedAt: Number(data.waitedAt) || 0, seq: data.seq,
         since: prev.state === data.state ? prev.since : Date.now(),
@@ -148,13 +144,17 @@ export function useAgentSync(enabled = true): AgentSync {
     (async () => {
       while (alive) {
         try {
-          const data = await readAgentSnapshot(token, seqRef.current, controller.signal);
+          const sequence = seqRef.current;
+          const data = await readAgentSnapshot(token, sequence, controller.signal);
           if (!alive) return;
+          // An action may have delivered a newer, live queue while this poll was in flight.
+          if (data.state === 'unpaired' && seqRef.current !== sequence) continue;
           accept(data);
           // Nothing reported yet: the first poll returns straight away, so wait before asking again.
           if (data.state === 'unpaired') await sleep(2500);
         } catch {
           if (!alive) return;
+          setSync((previous) => previous.connected ? { ...previous, connected: false } : previous);
           await sleep(3000);
         }
       }

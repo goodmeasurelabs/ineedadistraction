@@ -23,7 +23,7 @@ function returnLabel(run: AgentRunSnapshot): string {
   return `Back to ${name(run)}`;
 }
 
-export default function AgentQueue({ agent, onStopDistractions }: { agent: AgentSync; onStopDistractions?: () => void }) {
+export default function AgentQueue({ agent, onStopDistractions, resumeLabel = 'Resume this game' }: { agent: AgentSync; onStopDistractions?: () => void; resumeLabel?: string }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const { note, back, clear } = useReturnToAgent();
   const [error, setError] = useState('');
@@ -127,7 +127,7 @@ export default function AgentQueue({ agent, onStopDistractions }: { agent: Agent
           {notice.returnTarget === 'unavailable'
             ? <p>Open {name(notice)} manually to review this {needsInput(notice) ? 'request' : 'result'}.</p>
             : <button className="agent-notice-primary" autoFocus disabled={busy} onClick={() => void returnTo(notice)}>{returnLabel(notice)}</button>}
-          <button disabled={busy} onClick={() => void action('ack', notice)}>Resume this game</button>
+          <button disabled={busy} onClick={() => void action('ack', notice)}>{resumeLabel}</button>
           {onStopDistractions && <button onClick={onStopDistractions}>Stop distracting</button>}
           {needsInput(notice) && <button disabled={busy} onClick={() => void action('dismiss', notice)}>Clear this request</button>}
           {(error || note) && <p role="status">{error || note}</p>}
