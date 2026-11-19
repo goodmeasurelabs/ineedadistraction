@@ -24,7 +24,7 @@ codex plugin add distraction@ineedadistraction
 
 Then review and trust the plugin's hooks in **Settings > Hooks** in Codex Desktop, or run `/hooks` in Codex CLI. Updates to the plugin's scripts may require a new review.
 
-Send your agent any prompt and the arcade opens in your browser, already paired. Or ask it to "open my distraction".
+Send a prompt in your active coding app to open the paired arcade. On macOS, plugin 0.5.1 checks that the app you sent it from is still in front. You can also ask your agent to “open my distraction.”
 
 On macOS, the return button opens the selected Codex Desktop chat or the originating iTerm pane for Codex CLI and Claude Code. Other terminals can come forward at the app level. A closed iTerm pane falls back to opening its app.
 

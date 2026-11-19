@@ -21,7 +21,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-PLUGIN_VERSION = "0.5.0"
+PLUGIN_VERSION = "0.5.1"
 CATEGORIES = ("merge", "logic", "math", "arcade", "words", "memory")
 DEFAULTS = {"version": 1, "enabled": True, "categories": list(CATEGORIES[:4]), "pace": "any", "sound": False}
 ROOT = Path(os.environ.get("INAD_HOME", str(Path.home() / ".config/ineedadistraction")))

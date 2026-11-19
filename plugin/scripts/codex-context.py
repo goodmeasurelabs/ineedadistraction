@@ -82,6 +82,45 @@ def hook_input():
     return event
 
 
+def prompt_origin():
+    """Identify interactive root sessions from their header, without reading turn content."""
+    event = hook_input()
+    if event.get("hook_event_name") != "UserPromptSubmit":
+        return "unknown"
+    if event.get("agent_id") or event.get("agent_type"):
+        return "internal"
+    session = event.get("session_id")
+    transcript = event.get("transcript_path")
+    if not isinstance(session, str) or not session or not isinstance(transcript, str) or not transcript:
+        return "unknown"
+    with Path(transcript).open("rb") as stream:
+        header = stream.readline(INPUT_BYTES + 1)
+    if not header or len(header) > INPUT_BYTES:
+        return "unknown"
+    record = json.loads(header)
+    if record.get("type") != "session_meta":
+        return "unknown"
+    meta = record.get("payload")
+    if not isinstance(meta, dict):
+        return "unknown"
+    # Child sessions can share the main session_id; id identifies the individual thread.
+    if session not in (meta.get("id"), meta.get("session_id")):
+        return "unknown"
+    source = meta.get("source")
+    kind = meta.get("thread_source")
+    if isinstance(source, dict) and ("subagent" in source or "subAgent" in source):
+        return "internal"
+    if meta.get("parent_thread_id") and kind != "user":
+        return "internal"
+    if event.get("thread_id") and event["thread_id"] != meta.get("id"):
+        return "unknown"
+    if source == "exec" or (kind and kind != "user"):
+        return "internal"
+    if source in ("cli", "vscode") or (kind == "user" and source in ("appServer", "app_server")):
+        return "user"
+    return "unknown"
+
+
 def register(directory):
     event = hook_input()
     call_id = event.get("tool_use_id")
@@ -270,6 +309,9 @@ def pending(directory, transcript):
 def main():
     os.umask(0o077)
     try:
+        if len(sys.argv) == 2 and sys.argv[1] == "prompt-origin":
+            print(prompt_origin())
+            return 0
         if len(sys.argv) == 2 and sys.argv[1] == "approval":
             print(approval())
             return 0
@@ -282,7 +324,9 @@ def main():
     except (OSError, ValueError, TypeError, AttributeError, RecursionError):
         pass
     # No exception text: it could include a path or untrusted transcript content.
-    if len(sys.argv) > 1 and sys.argv[1] == "pending":
+    if len(sys.argv) > 1 and sys.argv[1] == "prompt-origin":
+        print("unknown")
+    elif len(sys.argv) > 1 and sys.argv[1] == "pending":
         print("pending")
     elif len(sys.argv) > 1 and sys.argv[1] == "approval":
         print("notify")

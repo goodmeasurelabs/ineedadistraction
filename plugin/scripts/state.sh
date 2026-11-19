@@ -100,7 +100,7 @@ fi
 # A new shell gives the background sender its own $$ (a plain (...) does not).
 if [ "$STATE" = "--send" ]; then
   [ -f "$DIR/off" ] && [ ! -f "$DIR/settings.json" ] && exit 0
-  SESSION="$REASON"; SID="$3"
+  SID="$3"
   DIR=$(cd "$DIR" 2>/dev/null && pwd -P) || exit 0
   INAD_HOME="$DIR"
   export INAD_HOME
@@ -118,18 +118,7 @@ if [ "$STATE" = "--send" ]; then
   REPLY=$(sh "$HERE/state.sh" --request "$OWNER" "$TOKEN" "$SID" "$1" "$2" "$3" "$4" "$5" "$6" "$7") || exit 0
   [ -n "$REPLY" ] || exit 0
   printf '%s' "$5" > "$DIR/sent.$SID.$$" && mv -f "$DIR/sent.$SID.$$" "$DIR/sent.$SID"
-  OPEN=0
-  if [ "$1" = "working" ] && [ ! -f "$DIR/off" ] && [ ! -f "$DIR/no-auto-open" ] && [ -n "$SESSION" ] \
-     && [ "$(cat "$DIR/opened-for" 2>/dev/null)" != "$SESSION" ]; then
-    case "$REPLY" in *'"attached":false'*)
-      printf '%s' "$SESSION" > "$DIR/opened-for"
-      OPEN=1 ;;
-    esac
-  fi
-  # Reserve the auto-open above while serialized, but launch outside the lock.
-  release_lock
-  trap - 0 1 2 15
-  [ "$OPEN" -eq 1 ] && sh "$HERE/open.sh" --background
+  # Reports, including delayed retries, only update the agent's state.
   exit 0
 fi
 
@@ -204,6 +193,7 @@ LAST="$1 $2 $3"
 LAST_EVENT_AT="${4:-0}"
 PROMPT_AT="${6:-0}"
 LAST_REQUEST="${10:--}"
+OFFERED="${11:-0}"
 EVENT=$(field hook_event_name)
 TOOL=$(field tool_name)
 QUESTIONS="$DIR/questions.$SID"
@@ -234,15 +224,6 @@ if [ "$AGENT" = "codex" ]; then
   fi
 fi
 
-# The user just sent a prompt: put the game in front of them now, before the
-# report below and whatever the server says. Only on macOS, where the game is
-# one pop-up window that open.sh can find and bring forward; elsewhere it opens
-# once per session, after the report (see --send).
-if [ "$STATE" = "working" ] && [ "$(uname)" = "Darwin" ] && [ ! -f "$DIR/off" ] && [ ! -f "$DIR/no-auto-open" ]; then
-  (
-    exec sh "$HERE/open.sh" --resurface
-  ) </dev/null >/dev/null 2>&1 &
-fi
 if [ "$STATE" = "resume" ]; then
   # Question and generic pre-tool hooks run concurrently. Do not undo a
   # question's waiting state before the question has even been shown.
@@ -318,11 +299,39 @@ EVENT_ID=$(od -An -N12 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')
 [ -n "$EVENT_ID" ] || finish
 set -- $(sh "$HERE/focus.sh" --target "$SESSION" 2>/dev/null)
 TARGET="${1:-unavailable}"
+BUNDLE="${3:--}"
 [ ! -f "$DIR/no-return" ] || TARGET="unavailable"
 
+# Only a newly submitted human prompt can present the player. Working reports
+# from an approval, a model continuation, or a network retry have no UI effects.
+OPEN_MODE=""
+FIRST=""
+if [ "$EVENT $STATE $REASON" = "UserPromptSubmit working prompt" ] && [ -n "$SESSION" ] &&
+   [ ! -f "$DIR/off" ] && [ ! -f "$DIR/no-auto-open" ]; then
+  ORIGIN=unknown
+  case "$AGENT" in
+    codex) ORIGIN=$(printf '%s' "$INPUT" | python3 "$HERE/codex-context.py" prompt-origin 2>/dev/null) ;;
+    claude-code)
+      case "$(field transcript_path)" in
+        */subagents/*) ;;
+        *) [ -n "$(field agent_id)" ] || ORIGIN=user ;;
+      esac ;;
+  esac
+  if [ "$ORIGIN" = user ]; then
+    # Older installations used one shared marker for ordinary browser tabs.
+    if [ "$OFFERED" != 1 ] && [ "$(cat "$DIR/opened-for" 2>/dev/null)" = "$SESSION" ]; then OFFERED=1; fi
+    if [ "$(uname)" = Darwin ]; then
+      [ "$BUNDLE" = "-" ] || OPEN_MODE=--resurface
+    elif [ "$OFFERED" != 1 ]; then
+      OPEN_MODE=--background
+    fi
+    if [ -n "$OPEN_MODE" ] && [ "$OFFERED" != 1 ]; then FIRST=first; OFFERED=1; fi
+  fi
+fi
+
 # Readers must see either the previous state or the complete new state.
-if ! { printf '%s %s %s %s %s %s %s %s %s %s\n' \
-  "$STATE" "$REASON" "$AGENT" "$EVENT_AT" "$EVENT_ID" "$PROMPT_AT" "$TARGET" "${2:--}" "${3:--}" "$REQUEST" > "$DIR/tmp.$$" &&
+if ! { printf '%s %s %s %s %s %s %s %s %s %s %s\n' \
+  "$STATE" "$REASON" "$AGENT" "$EVENT_AT" "$EVENT_ID" "$PROMPT_AT" "$TARGET" "${2:--}" "$BUNDLE" "$REQUEST" "$OFFERED" > "$DIR/tmp.$$" &&
   mv -f "$DIR/tmp.$$" "$DIR/run.$SID" &&
   printf '%s %s %s' "$STATE" "$REASON" "$AGENT" > "$DIR/last"; } 2>/dev/null; then
   rm -f "$DIR/tmp.$$" 2>/dev/null
@@ -330,6 +339,11 @@ if ! { printf '%s %s %s %s %s %s %s %s %s %s\n' \
 fi
 release_lock
 trap - 0 1 2 15
+
+case "$OPEN_MODE" in
+  --resurface) (exec sh "$HERE/open.sh" --resurface "$BUNDLE" ${FIRST:+"$FIRST"}) </dev/null >/dev/null 2>&1 & ;;
+  --background) (exec sh "$HERE/open.sh" --background) </dev/null >/dev/null 2>&1 & ;;
+esac
 
 (
   exec sh "$HERE/state.sh" --send "$SESSION" "$SID"

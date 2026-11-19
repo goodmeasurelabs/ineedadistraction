@@ -47,7 +47,7 @@ Word and memory categories are planned but have no agent-ready games in this ver
 
 ## Open the game
 
-Once the plugin is installed and distractions are On, the compact player opens automatically as the agent works. To open it on request, run `sh <plugin>/scripts/open.sh`, which starts the local control connection and opens `/arcade` with a paired link. The website's `/agent` page is the separate setup experience. Keep working afterwards; do not wait for the user to play.
+With distractions On, a fresh prompt can open the compact player. On macOS, plugin 0.5.1 checks that the originating coding app or terminal is still in front before raising the player. To open it on request, run `sh <plugin>/scripts/open.sh`, which starts the local control connection and opens `/arcade` with a paired link. The website's `/agent` page is the separate setup experience. Keep working afterwards; do not wait for the user to play.
 
 Verify the settings handshake with `python3 <plugin>/scripts/settings.py sync`; then verify a fresh lifecycle report before claiming automatic pause is working. Ask the user to complete any native hook review that is still required. The popup's separate browser profile receives preferences through the plugin, not through website localStorage.
 

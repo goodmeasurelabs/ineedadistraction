@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -9,21 +9,24 @@ const plugin = resolve('plugin');
 type Handler = { command: string };
 type Group = { matcher?: string; hooks: Handler[] };
 
-function session(agent: 'codex' | 'claude' = 'codex') {
+function session(agent: 'codex' | 'claude' = 'codex', options: { autoOpen?: boolean; os?: 'Darwin' | 'Linux'; noReturn?: boolean } = {}) {
   const manifest = JSON.parse(readFileSync(join(plugin, '.codex-plugin/plugin.json'), 'utf8'));
   const file = agent === 'codex' ? manifest.hooks : 'hooks/hooks.json';
   const hooks = JSON.parse(readFileSync(join(plugin, file), 'utf8')).hooks as Record<string, Group[]>;
   const dir = mkdtempSync(join(tmpdir(), 'inad-state-test-'));
   const transcript = join(dir, 'transcript.jsonl');
-  writeFileSync(transcript, '');
+  writeFileSync(transcript, JSON.stringify({ type: 'session_meta', payload: { id: 'root-session', source: 'vscode', thread_source: 'user' } }) + '\n');
   // The foreground state transition is real; background reports and macOS
   // helpers are stubbed so tests cannot access the network or switch apps.
   writeFileSync(join(dir, 'sh'), `#!/bin/sh
-case "$1" in */open.sh|*/wait.sh) exit 0 ;; esac
+case "$1" in
+  */open.sh) shift; printf '%s\\n' "$*" >> "$INAD_HOME/opens"; exit 0 ;;
+  */wait.sh) exit 0 ;;
+esac
 case "$2" in --send|--listen) exit 0 ;; esac
 exec /bin/sh "$@"
 `, { mode: 0o755 });
-  writeFileSync(join(dir, 'uname'), '#!/bin/sh\nprintf Darwin\n', { mode: 0o755 });
+  writeFileSync(join(dir, 'uname'), `#!/bin/sh\nprintf '${options.os ?? 'Darwin'}'\n`, { mode: 0o755 });
   writeFileSync(join(dir, 'curl'), `#!/bin/sh
 while [ "$#" -gt 0 ]; do
   if [ "$1" = -d ]; then
@@ -33,10 +36,11 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 [ "$TEST_REQUEST_FAILURE" = 1 ] && exit 1
-printf '{"attached":true}'
+printf '{"attached":false}'
 `, { mode: 0o755 });
   writeFileSync(join(dir, 'token'), 'isolated-test-pairing-token');
-  writeFileSync(join(dir, 'no-auto-open'), '');
+  if (!options.autoOpen) writeFileSync(join(dir, 'no-auto-open'), '');
+  if (options.noReturn) writeFileSync(join(dir, 'no-return'), '');
   function runFile() {
     const file = readdirSync(dir).find((name) => /^run\.\d+$/.test(name));
     assert.ok(file, 'expected a local run record');
@@ -62,6 +66,7 @@ printf '{"attached":true}'
               NODE_ENV: 'test',
               PATH: `${dir}:/usr/bin:/bin`, INAD_HOME: dir,
               CLAUDE_PLUGIN_ROOT: plugin,
+              __CFBundleIdentifier: 'com.apple.Terminal',
               ...(agent === 'codex' ? { PLUGIN_ROOT: plugin, CODEX_INTERNAL_ORIGINATOR_OVERRIDE: 'Codex Desktop' } : {}),
             },
           });
@@ -77,15 +82,23 @@ printf '{"attached":true}'
       const [state, reason, label, at, id, promptAt, target, locator] = readFileSync(join(dir, runFile()), 'utf8').trim().split(' ');
       return { state, reason, label, at: Number(at), id, promptAt: Number(promptAt), target, locator };
     },
-    send(fail = false) {
+    send(fail = false, originSession = '') {
       const sid = runFile().slice(4);
-      const result = spawnSync('/bin/sh', [join(plugin, 'scripts/state.sh'), '--send', '', sid], {
+      const result = spawnSync('/bin/sh', [join(plugin, 'scripts/state.sh'), '--send', originSession, sid], {
         encoding: 'utf8', timeout: 5000,
         env: { NODE_ENV: 'test', PATH: `${dir}:/usr/bin:/bin`, INAD_HOME: dir, TEST_REQUEST_FAILURE: fail ? '1' : '' },
       });
       assert.ifError(result.error);
       assert.equal(result.status, 0, result.stderr);
       return readFileSync(join(dir, 'request-bodies'), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+    },
+    async opens(expected: number) {
+      const path = join(dir, 'opens');
+      const read = () => existsSync(path) ? readFileSync(path, 'utf8').trim().split('\n') : [];
+      // The launcher is detached; allow a slow worker to reach the stub.
+      const deadline = Date.now() + 2000;
+      while (read().length < expected && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
+      return read();
     },
     answer(call: string, index = 0) {
       const reply = [{ questionItemId: JSON.stringify(['request_user_input_async', call, index]), answer: 'yes' }];
@@ -103,6 +116,47 @@ printf '{"attached":true}'
     close() { rmSync(dir, { recursive: true, force: true }); },
   };
 }
+
+test('only fresh interactive Codex prompts may raise the Mac popup, even when return-to-agent is disabled', async () => {
+  const s = session('codex', { autoOpen: true, noReturn: true });
+  try {
+    s.event('UserPromptSubmit', { agent_id: 'worker' });
+    s.event('UserPromptSubmit', { transcript_path: '/missing/transcript.jsonl' });
+    s.event('UserPromptSubmit');
+    assert.equal(s.record().target, 'unavailable');
+    assert.deepEqual(await s.opens(1), ['--resurface com.openai.codex first']);
+    s.event('PermissionRequest', { tool_name: 'Bash' });
+    s.event('PostToolUse', { tool_name: 'Bash' });
+    s.event('Stop');
+    s.event('PreModelRequest', { kind: 'sampling' });
+    // Releasing a delayed working-state report while detached must have no UI effect.
+    s.send(false, 'root-session');
+    s.event('UserPromptSubmit');
+    assert.deepEqual(await s.opens(2), ['--resurface com.openai.codex first', '--resurface com.openai.codex']);
+  } finally { s.close(); }
+});
+
+test('Mac Claude child hooks do not open the popup and a user prompt carries its originating terminal', async () => {
+  const s = session('claude', { autoOpen: true });
+  try {
+    s.event('UserPromptSubmit', { transcript_path: '/isolated/.claude/subagents/agent-12.jsonl' });
+    s.event('UserPromptSubmit', { agent_id: 'worker' });
+    s.event('UserPromptSubmit');
+    assert.deepEqual(await s.opens(1), ['--resurface com.apple.Terminal first']);
+  } finally { s.close(); }
+});
+
+test('automatic opening on other platforms happens once per session, including interleaved chats', async () => {
+  const s = session('claude', { autoOpen: true, os: 'Linux' });
+  try {
+    s.event('UserPromptSubmit');
+    s.event('UserPromptSubmit');
+    s.event('UserPromptSubmit', { session_id: 'other-session' });
+    s.event('UserPromptSubmit');
+    s.send(false, 'other-session');
+    assert.deepEqual(await s.opens(2), ['--background', '--background']);
+  } finally { s.close(); }
+});
 
 test('prompt identity survives a coalesced stop, retries, duplicates, and a fast quit', () => {
   const s = session();

@@ -13,7 +13,7 @@ The scripts live in this plugin's `scripts/` folder, two levels above this file.
 
 Run `sh <plugin>/scripts/open.sh`. It opens the compact player at `/arcade` and prints the paired link. `/agent` is the separate website setup page. Then keep working; do not wait for the user to play. An explicit open preserves Off; only an explicit request to turn distractions on enables them.
 
-On macOS with a Chromium browser the game is a small pop-up window in a browser instance of its own (profile in `~/.config/ineedadistraction/browser`), so it has its own saves and sign-in. Running `open.sh` again brings that same window back to the front; it does not open a second one. When distractions are On, the hooks do the same each time the user sends a prompt.
+On macOS with a Chromium browser the game is a small pop-up window in a browser instance of its own (profile in `~/.config/ineedadistraction/browser`), so it has its own saves and sign-in. Running `open.sh` again brings that same window back to the front; it does not open a second one. When distractions are On, a fresh interactive prompt can bring the popup forward while the originating coding app or terminal is still active. Switching to another app keeps that app in front.
 
 After updating the plugin, follow the agent client's restart or hook-review instructions, then refresh the existing popup once (Cmd+R on macOS, Ctrl+R elsewhere) to load the new controls. Opening it again only brings the existing window forward.
 
