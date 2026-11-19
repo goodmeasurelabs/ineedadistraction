@@ -9,8 +9,6 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-const SHAPE_POPUP = `(function(){try{if(/&popup$/.test(location.hash)){var w=460,h=Math.min(800,screen.availHeight);resizeTo(w,h);moveTo(screen.availWidth-w-24,Math.max(0,(screen.availHeight-h)/2))}}catch(e){}})()`;
-
 export default function ArcadePage() {
-  return <><script dangerouslySetInnerHTML={{ __html: SHAPE_POPUP }} /><ArcadeClient /></>;
+  return <ArcadeClient />;
 }

@@ -63,6 +63,43 @@ export type ClipPlayerEvents = {
   onFailure(message: string): void;
 };
 
+/** Start a new attempt whenever the popup shows the player, and release it before it disappears. */
+export function playWhileVisible(element: HTMLElement, start: () => () => void): () => void {
+  let watching = true;
+  let pageShown = true;
+  let inView = false;
+  let stop: (() => void) | undefined;
+  function update() {
+    if (watching && pageShown && !document.hidden && inView) {
+      stop ??= start();
+    } else if (stop) {
+      stop();
+      stop = undefined;
+    }
+  }
+  function pageVisibility(event: PageTransitionEvent) {
+    pageShown = event.type === 'pageshow';
+    update();
+  }
+  const observer = new IntersectionObserver((entries) => {
+    inView = entries[entries.length - 1].intersectionRatio >= 0.5;
+    update();
+  }, { threshold: 0.5 });
+  observer.observe(element);
+  document.addEventListener('visibilitychange', update);
+  window.addEventListener('pagehide', pageVisibility);
+  window.addEventListener('pageshow', pageVisibility);
+  return () => {
+    if (!watching) return;
+    watching = false;
+    observer.disconnect();
+    document.removeEventListener('visibilitychange', update);
+    window.removeEventListener('pagehide', pageVisibility);
+    window.removeEventListener('pageshow', pageVisibility);
+    update();
+  };
+}
+
 /** A player belongs to one attempt. Cancel before releasing its frame or running any fallback. */
 export function mountClipPlayer(
   host: HTMLDivElement,
@@ -76,6 +113,7 @@ export function mountClipPlayer(
   let frame: HTMLIFrameElement | undefined;
   let position = options.start;
   let sound = options.sound;
+  let startedMuted = true;
   let watchdog: ReturnType<typeof setTimeout> | undefined;
   const stop = () => {
     if (active) {
@@ -115,9 +153,10 @@ export function mountClipPlayer(
         if (!canPlay()) return;
         clearTimeout(watchdog);
         try {
-          applySound(target);
-          // Native controls remain available when this attempt is blocked.
-          events.onPressPlay();
+          // A popup opened by an agent may have no gesture to authorize audio.
+          startedMuted = !sound || !window.navigator?.userActivation?.hasBeenActive;
+          if (startedMuted) target.mute();
+          else target.unMute();
           target.playVideo();
         } catch { fail('YouTube could not start this clip.'); }
       },
@@ -126,7 +165,18 @@ export function mountClipPlayer(
         if (data === 1) events.onPlaying();
         if (data === 0) { stop(); events.onEnded(); }
       },
-      onAutoplayBlocked() { if (canPlay()) events.onPressPlay(); },
+      onAutoplayBlocked({ target }) {
+        if (!canPlay()) return;
+        if (!startedMuted) {
+          startedMuted = true;
+          try {
+            target.mute();
+            target.playVideo();
+          } catch { events.onPressPlay(); }
+        } else {
+          events.onPressPlay();
+        }
+      },
       onError({ data }) {
         if (!active) return;
         if ([100, 101, 150].includes(data)) { stop(); events.onUnavailable(); }

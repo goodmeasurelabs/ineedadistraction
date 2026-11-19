@@ -2,6 +2,7 @@ import { isAgentToken } from '../lib/agentSession';
 
 export const AGENT_TOKEN_KEY = 'inad:agent-token';
 const POPUP_TOKEN_KEY = 'inad:plugin-popup-token:v1';
+const CLIPS_KEY = 'inad:popup-family-guy:v1';
 
 function isAppWindow() {
   return typeof window !== 'undefined' && window.top === window && !window.opener &&
@@ -11,6 +12,20 @@ function isAppWindow() {
 function readWindowPairing(): string | null {
   if (!isAppWindow()) return null;
   return window.sessionStorage.getItem(POPUP_TOKEN_KEY);
+}
+
+/** This choice belongs to the dedicated player, including its next launch. */
+export function prefersPopupClips(): boolean {
+  try { return isAgentToken(readWindowPairing()) && localStorage.getItem(CLIPS_KEY) === 'on'; }
+  catch { return false; }
+}
+
+export function rememberPopupClips(clips: boolean) {
+  try {
+    if (!isAgentToken(readWindowPairing())) return;
+    if (clips) localStorage.setItem(CLIPS_KEY, 'on');
+    else localStorage.removeItem(CLIPS_KEY);
+  } catch { /* The choice still applies to this open player. */ }
 }
 
 /** All queue, settings and return requests in this window use the same pairing. */
@@ -50,6 +65,7 @@ export function initializeArcadePairing(fragment: URLSearchParams): Pairing {
     }
     const saved = popup ? readWindowPairing() : localStorage.getItem(AGENT_TOKEN_KEY);
     if (saved !== token) return { popup: false, error: 'storage' };
+    if (popup && fragment.get('mode') === 'clips') rememberPopupClips(true);
     return { popup };
   } catch {
     return { popup: false, error: 'storage' };

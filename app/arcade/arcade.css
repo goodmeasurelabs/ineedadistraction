@@ -14,3 +14,71 @@
 .arcade-clips-choice:hover { background: #50365f; }
 .arcade-clips-choice span { color: #e4aafe; margin-right: 4px; }
 .arcade-watch { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
+
+.is-watching-clips .arcade-controls {
+  display: grid;
+  grid-template-areas: "brand agents controls";
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0 clamp(12px, 1.6vw, 26px);
+  padding: 6px clamp(10px, 1.2vw, 20px);
+  background: #172120;
+}
+
+.is-watching-clips .arcade-brand-row { grid-area: brand; min-height: 36px; }
+.is-watching-clips .arcade-mode-row { grid-area: controls; margin: 0; }
+
+.is-watching-clips .arcade-mode {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.is-watching-clips .arcade-toggle { min-height: 36px; }
+
+.is-watching-clips .arcade-controls .agent-queue {
+  grid-area: agents;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+}
+
+.is-watching-clips .agent-queue summary {
+  width: fit-content;
+  max-width: 100%;
+  min-height: 36px;
+  gap: 8px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  color: #d6e4df;
+}
+
+.is-watching-clips .agent-queue summary:hover { background: #263331; }
+
+.is-watching-clips .agent-queue details[open] {
+  border-radius: 8px;
+  background: #111b1a;
+}
+
+.is-watching-clips .agent-queue-list {
+  max-height: min(38dvh, 340px);
+  padding: 0 10px;
+}
+
+@media (max-width: 580px) {
+  .is-watching-clips .arcade-controls {
+    grid-template-areas: "brand controls" "agents agents";
+    grid-template-columns: 1fr auto;
+  }
+  .is-watching-clips .agent-queue summary { min-height: 30px; padding-inline: 0; }
+  .is-watching-clips .agent-queue details[open] summary { padding-inline: 8px; }
+}
+
+@media (pointer: coarse) {
+  .is-watching-clips .arcade-brand-row,
+  .is-watching-clips .arcade-toggle,
+  .is-watching-clips .agent-queue summary { min-height: 44px; }
+}

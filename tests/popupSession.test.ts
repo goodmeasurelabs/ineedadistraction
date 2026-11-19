@@ -1,6 +1,6 @@
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { AGENT_TOKEN_KEY, initializeArcadePairing } from '../app/arcade/popupSession';
+import { AGENT_TOKEN_KEY, initializeArcadePairing, prefersPopupClips, rememberPopupClips } from '../app/arcade/popupSession';
 import { readAgentToken, updateAgentQueue } from '../app/games/engine/useAgentSync';
 
 const first = 'first-test-pairing-for-distraction';
@@ -74,6 +74,34 @@ test('a normal tab ignores an inherited popup credential and saves a copied laun
   assert.deepEqual(initializeArcadePairing(launch(second)), { popup: false });
   assert.equal(readAgentToken(), second);
   assert.equal(local.getItem(AGENT_TOKEN_KEY), second);
+});
+
+test('a clip choice survives a fresh popup launch until the user returns to games', (t) => {
+  const { view } = browser(t, 'standalone');
+  initializeArcadePairing(launch(first));
+  assert.equal(prefersPopupClips(), false);
+  rememberPopupClips(true);
+  view.sessionStorage = storage();
+  assert.equal(prefersPopupClips(), false, 'a locally saved choice alone cannot enable clips');
+  initializeArcadePairing(launch(first));
+  assert.equal(prefersPopupClips(), true);
+  rememberPopupClips(false);
+  initializeArcadePairing(clean);
+  assert.equal(prefersPopupClips(), false);
+});
+
+test('opening directly into clips requires a valid dedicated launch and cannot opt in an ordinary tab', (t) => {
+  const { view } = browser(t, 'browser');
+  const direct = new URLSearchParams({ t: first, mode: 'clips', popup: '' });
+  initializeArcadePairing(direct);
+  rememberPopupClips(true);
+  view.mode = 'standalone';
+  initializeArcadePairing(launch(first));
+  assert.equal(prefersPopupClips(), false, 'a prior visit in a tab did not change the choice');
+  initializeArcadePairing(direct);
+  assert.equal(prefersPopupClips(), true);
+  view.mode = 'browser';
+  assert.equal(prefersPopupClips(), false);
 });
 
 test('legacy app windows and fresh unmarked links retain the profile-wide pairing', (t) => {

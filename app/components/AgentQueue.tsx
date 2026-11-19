@@ -23,7 +23,7 @@ function returnLabel(run: AgentRunSnapshot): string {
   return `Back to ${name(run)}`;
 }
 
-export default function AgentQueue({ agent, onStopDistractions, resumeLabel = 'Resume this game' }: { agent: AgentSync; onStopDistractions?: () => void; resumeLabel?: string }) {
+export default function AgentQueue({ agent, onStopDistractions, clipMode = false }: { agent: AgentSync; onStopDistractions?: () => void; clipMode?: boolean }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const { note, back, clear } = useReturnToAgent();
   const [error, setError] = useState('');
@@ -70,7 +70,9 @@ export default function AgentQueue({ agent, onStopDistractions, resumeLabel = 'R
     setError('');
     trackEvent('agent_return_click', { location: 'queue', agent: run.agent ?? 'agent' });
     try {
-      if (await back(run)) await updateAgentQueue('ack', run);
+      // Keep clips paused while the user switches to their agent to answer.
+      // Its next working report clears the notice and resumes playback.
+      if (await back(run) && !clipMode) await updateAgentQueue('ack', run);
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Could not update the queue.');
     } finally { setBusy(false); }
@@ -78,10 +80,14 @@ export default function AgentQueue({ agent, onStopDistractions, resumeLabel = 'R
 
   if (!agent.paired) return null;
 
+  const workingNames = [...new Set(working.map(name))];
+  const workingStatus = clipMode
+    ? `${workingNames.join(' and ')} ${workingNames.length === 1 ? 'is' : 'are'} working`
+    : `${working.length} ${working.length === 1 ? 'agent is' : 'agents are'} working`;
   const status = pending.length
     ? `${pending.length} ${pending.length === 1 ? 'agent needs' : 'agents need'} your input`
     : working.length
-      ? `${working.length} ${working.length === 1 ? 'agent is' : 'agents are'} working`
+      ? workingStatus
       : earlier.length ? `${earlier.length} earlier ${earlier.length === 1 ? 'request' : 'requests'}` : 'No agents need your input';
 
   return (
@@ -127,7 +133,7 @@ export default function AgentQueue({ agent, onStopDistractions, resumeLabel = 'R
           {notice.returnTarget === 'unavailable'
             ? <p>Open {name(notice)} manually to review this {needsInput(notice) ? 'request' : 'result'}.</p>
             : <button className="agent-notice-primary" autoFocus disabled={busy} onClick={() => void returnTo(notice)}>{returnLabel(notice)}</button>}
-          <button disabled={busy} onClick={() => void action('ack', notice)}>{resumeLabel}</button>
+          <button disabled={busy} onClick={() => void action('ack', notice)}>{clipMode ? 'Back to clips' : 'Resume this game'}</button>
           {onStopDistractions && <button onClick={onStopDistractions}>Stop distracting</button>}
           {needsInput(notice) && <button disabled={busy} onClick={() => void action('dismiss', notice)}>Clear this request</button>}
           {(error || note) && <p role="status">{error || note}</p>}
