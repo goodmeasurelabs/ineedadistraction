@@ -17,50 +17,49 @@ function applyBounds(bounds: Bounds) {
   }
 }
 
-/** Called after a marked, dedicated launcher window is successfully paired. */
-export function positionGamePopup() {
-  const available = availableScreen();
+function compactBounds(available: Bounds): Bounds {
   const width = Math.min(460, available.width);
   const height = Math.min(800, available.height);
-  applyBounds({
+  return {
     width, height,
     left: available.left + Math.max(0, available.width - width - 24),
     top: available.top + Math.round((available.height - height) / 2),
-  });
+  };
 }
 
-function savedGameBounds(): Bounds | undefined {
+function takeLegacyBounds(): Bounds | undefined {
   try {
-    // Reloading an expanded popup must still restore the original game window.
     const raw = window.sessionStorage.getItem(GAME_BOUNDS_KEY);
     if (raw) {
+      window.sessionStorage.removeItem(GAME_BOUNDS_KEY);
       const saved = JSON.parse(raw);
       if (saved && [saved.left, saved.top, saved.width, saved.height].every(Number.isFinite) && saved.width > 0 && saved.height > 0) return saved;
     }
   } catch { /* The current bounds also work without storage. */ }
 }
 
-/** A reload may land in games or Off while the native window still has its clip geometry. */
-export function restoreClipWindow(original = savedGameBounds()) {
-  if (!original) return;
-  applyBounds(original);
-  try { window.sessionStorage.removeItem(GAME_BOUNDS_KEY); } catch { /* optional */ }
-}
-
-/** Expand only the paired popup; returning to games restores its previous bounds. */
-export function enterClipWindow(isPluginPopup: boolean): (() => void) | undefined {
-  if (!isPluginPopup) return;
-  const original = savedGameBounds() ?? {
-    left: window.screenX, top: window.screenY, width: window.outerWidth, height: window.outerHeight,
-  };
-  try { window.sessionStorage.setItem(GAME_BOUNDS_KEY, JSON.stringify(original)); } catch { /* optional */ }
+export function initializePopupWindow({ popup, freshLaunch }: { popup: boolean; freshLaunch: boolean }) {
+  if (!popup) return;
+  const saved = takeLegacyBounds();
+  if (!freshLaunch && !saved) return;
   const available = availableScreen();
+  if (freshLaunch) {
+    applyBounds(compactBounds(available));
+    return;
+  }
+
+  // Older clip windows saved their original bounds before automatically expanding.
+  // Migrate one on reload only if it still has the rectangle that release assigned.
   const inset = Math.min(24, Math.round(Math.min(available.width, available.height) * 0.02));
-  applyBounds({
-    left: available.left + inset,
-    top: available.top + inset,
-    width: available.width - 2 * inset,
-    height: available.height - 2 * inset,
-  });
-  return () => restoreClipWindow(original);
+  const matches = (actual: number, expected: number) => Math.abs(actual - expected) <= 2;
+  if (saved && matches(window.screenX, available.left + inset) && matches(window.screenY, available.top + inset)
+    && matches(window.outerWidth, available.width - 2 * inset) && matches(window.outerHeight, available.height - 2 * inset)) {
+    const width = Math.min(saved.width, available.width);
+    const height = Math.min(saved.height, available.height);
+    applyBounds({
+      width, height,
+      left: Math.max(available.left, Math.min(saved.left, available.left + available.width - width)),
+      top: Math.max(available.top, Math.min(saved.top, available.top + available.height - height)),
+    });
+  }
 }

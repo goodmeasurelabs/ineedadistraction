@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useReducer, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useReducer, useRef, useState, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import GameClient from '../games/[slug]/GameClient';
@@ -13,7 +13,7 @@ import AgentQueue from '../components/AgentQueue';
 import { trackEvent } from '../lib/analytics';
 import { INITIAL_DISTRACTION_HOLD, distractionHoldReducer } from '../lib/distractionHold';
 import { initializeArcadePairing, prefersPopupClips, rememberPopupClips } from './popupSession';
-import { enterClipWindow, positionGamePopup, restoreClipWindow } from './clipWindow';
+import { initializePopupWindow } from './clipWindow';
 
 const DRAFT_KEY = 'inad:setup-preferences:v1';
 const FamilyGuyClips = dynamic(() => import('./clips/FamilyGuyClips'), {
@@ -37,7 +37,7 @@ export default function ArcadeClient() {
       router.replace(cleanUrl, { scroll: false });
     }
     const { popup, error } = initializeArcadePairing(fragment);
-    if (hasPairing && popup) positionGamePopup();
+    initializePopupWindow({ popup, freshLaunch: hasPairing });
     if (error === 'invalid') setPairingError('That pairing link is incomplete. Ask your agent to open your distraction again.');
     else if (error === 'storage') setPairingError('This browser could not save the pairing. Allow site storage, then ask your agent to open your distraction again.');
     else if (hasPairing) trackEvent('agent_pairing_link_opened', {});
@@ -76,11 +76,6 @@ function Player({ pairingError, isPluginPopup }: { pairingError: string; isPlugi
   const clipsAvailable = isPluginPopup && !!control.settings;
   const clipsActive = clipsAvailable && watchingClips;
   const clipConnectionReady = control.connected && agent.connected;
-
-  useLayoutEffect(() => {
-    if (clipsActive && !off) return enterClipWindow(isPluginPopup);
-    if (isPluginPopup && !control.loading) restoreClipWindow();
-  }, [clipsActive, off, isPluginPopup, control.loading]);
 
   function chooseClips(clips: boolean) {
     if (isPluginPopup) rememberPopupClips(clips);
