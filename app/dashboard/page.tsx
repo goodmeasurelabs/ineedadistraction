@@ -3,6 +3,7 @@ import { getWidgets } from '../lib/store';
 import { getOrbitTwist } from '../lib/orbitPop';
 import DashboardClient from './DashboardClient';
 import { dailyChallenge, utcDate } from '../lib/daily';
+import { FAMILY_GUY_CLIPS } from '../arcade/clips/catalog';
 export const dynamic = 'force-dynamic';
 export async function generateMetadata({ searchParams }: { searchParams: Promise<{ challenge?: string; twist?: string; tab?: string }> }): Promise<Metadata> {
   const params = await searchParams;
@@ -19,5 +20,5 @@ export default async function DashboardPage() {
   const widgets = (await getWidgets()).map(({ html, ...game }) => ({ ...game, hasHtml: !!html }));
   const today = dailyChallenge(utcDate());
   const daily = { date: today.date, number: today.number, title: today.title, emoji: today.game.emoji, roundLabel: today.game.roundLabel };
-  return <DashboardClient initialWidgets={widgets} daily={daily} />;
+  return <DashboardClient initialWidgets={widgets} daily={daily} clipCount={FAMILY_GUY_CLIPS.length} />;
 }

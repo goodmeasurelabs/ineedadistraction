@@ -26,7 +26,7 @@ function writeLast(id: string) {
   try { sessionStorage.setItem(LAST_PICK_KEY, id); } catch { /* The picker still works without storage. */ }
 }
 
-export default function BreakButton({ community, daily }: { community: CommunityGame[]; daily: DailyTeaser }) {
+export default function BreakButton({ community, daily, clipCount }: { community: CommunityGame[]; daily: DailyTeaser; clipCount: number }) {
   const params = useSearchParams();
   const pool = useMemo(() => buildPool(community.map((game) => game.id)), [community]);
   const [current, setCurrent] = useState<Current | null>(null);
@@ -126,11 +126,23 @@ export default function BreakButton({ community, daily }: { community: Community
 
       {backToWork && <p className="bb-done" ref={doneRef} tabIndex={-1}>Back to it. The button will be here for your next break.</p>}
 
-      <a className="bb-daily" href="/daily" onClick={() => trackEvent('cta_click', { cta_text: 'Daily teaser', cta_location: 'home_hero' })}>
-        <span className="bb-daily-emoji" aria-hidden="true">{daily.emoji}</span>
-        <span><small>TODAY’S DAILY · #{daily.number}</small><strong>{daily.title}</strong><em>Same challenge for everyone today · {daily.roundLabel}</em></span>
-        <span aria-hidden="true" className="bb-daily-arrow">↗</span>
-      </a>
+      <div className="bb-features">
+        <a className="bb-clips-feature" href="/agent?mode=family-guy" onClick={() => trackEvent('cta_click', { cta_text: 'Set up Family Guy clips', cta_location: 'home_hero' })}>
+          {/* Official still from “The Griffins Attend Streaming Con.” Playback lives in the popup. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/featured/family-guy.jpg" width="320" height="180" alt="" />
+          <span className="bb-clips-copy">
+            <strong>Family Guy clips</strong>
+            <span>{clipCount} clips for your popup while Codex or Claude Code works.</span>
+            <b>Set up clips <span aria-hidden="true">→</span></b>
+          </span>
+        </a>
+        <a className="bb-daily" href="/daily" onClick={() => trackEvent('cta_click', { cta_text: 'Daily teaser', cta_location: 'home_hero' })}>
+          <span className="bb-daily-emoji" aria-hidden="true">{daily.emoji}</span>
+          <span><small>TODAY’S DAILY · #{daily.number}</small><strong>{daily.title}</strong><em>Same challenge for everyone today · {daily.roundLabel}</em></span>
+          <span aria-hidden="true" className="bb-daily-arrow">↗</span>
+        </a>
+      </div>
     </section>
   );
 }

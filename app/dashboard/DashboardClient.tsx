@@ -43,7 +43,9 @@ function WelcomeBanner({ onDismiss }: { onDismiss: () => void }) {
   );
 }
 
-function HomeContent({ initialWidgets, daily }: { initialWidgets: Widget[]; daily: DailyTeaser }) {
+type HomeProps = { initialWidgets: Widget[]; daily: DailyTeaser; clipCount: number };
+
+function HomeContent({ initialWidgets, daily, clipCount }: HomeProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isSignedIn } = useAuth();
@@ -169,7 +171,7 @@ function HomeContent({ initialWidgets, daily }: { initialWidgets: Widget[]; dail
       </header>
       <main className="distraction-main">
         {showWelcome && <WelcomeBanner onDismiss={() => setShowWelcome(false)} />}
-        {sort !== 'mine' && <BreakButton community={community} daily={daily} />}
+        {sort !== 'mine' && <BreakButton community={community} daily={daily} clipCount={clipCount} />}
         {sort !== 'mine' && (
           <section className="play-hero" aria-labelledby="arcade-title">
             <div className="play-hero-top">
@@ -460,10 +462,10 @@ function HomeContent({ initialWidgets, daily }: { initialWidgets: Widget[]; dail
   );
 }
 
-export default function DashboardClient({ initialWidgets, daily }: { initialWidgets: Widget[]; daily: DailyTeaser }) {
+export default function DashboardClient(props: HomeProps) {
   return (
     <Suspense>
-      <HomeContent initialWidgets={initialWidgets} daily={daily} />
+      <HomeContent {...props} />
     </Suspense>
   );
 }

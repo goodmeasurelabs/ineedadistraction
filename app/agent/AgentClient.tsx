@@ -13,18 +13,14 @@ import { trackEvent } from '../lib/analytics';
 
 const DRAFT_KEY = 'inad:setup-preferences:v1';
 
-export default function AgentClient() {
-  const [platform, setPlatform] = useState<'codex' | 'claude'>('codex');
+export default function AgentClient({ clipCount }: { clipCount?: number }) {
+  const clips = clipCount !== undefined;
   const [preferences, setPreferences] = useState<DistractionPreferences>(DEFAULT_DISTRACTION_PREFERENCES);
   const [hasToken, setHasToken] = useState(false);
   const [ready, setReady] = useState(false);
-  const [copiedPrompt, setCopiedPrompt] = useState('');
-  const [copyError, setCopyError] = useState('');
-  const [showPrompt, setShowPrompt] = useState(false);
   const [saveNote, setSaveNote] = useState('');
   const dirty = useRef(false);
-  const promptRef = useRef<HTMLTextAreaElement>(null);
-  const sync = useDistractionSettings();
+  const sync = useDistractionSettings(!clips);
 
   useEffect(() => {
     // Older plugins opened setup. Keep the secret in the fragment and let the
@@ -50,30 +46,10 @@ export default function AgentClient() {
     dirty.current = true;
     setPreferences(next);
     setSaveNote('');
-    setCopyError('');
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify(next)); } catch { /* optional */ }
   }
 
   const games = getEligibleGames(preferences);
-  const platformName = platform === 'codex' ? 'Codex' : 'Claude Code';
-  const prompt = preferences.categories.length ? buildSetupPrompt(platform, { ...preferences, enabled: true }) : '';
-  const copied = !!prompt && copiedPrompt === prompt;
-  const disabled = !ready || games.length === 0;
-
-  async function copyPrompt() {
-    setCopyError('');
-    try {
-      await navigator.clipboard.writeText(prompt);
-      setCopiedPrompt(prompt);
-      trackEvent('agent_setup_prompt_copied', {
-        platform, categories: preferences.categories.join(','), pace: preferences.pace,
-      });
-    } catch {
-      setShowPrompt(true);
-      setCopyError('Copy is unavailable in this browser. Select the prompt below and copy it manually.');
-    }
-  }
-
   async function savePreferences() {
     setSaveNote('');
     const saved = await sync.save({ ...preferences, enabled: sync.settings?.enabled ?? preferences.enabled });
@@ -90,16 +66,30 @@ export default function AgentClient() {
     <div className="pair-page">
       <header className="pair-nav">
         <Link href="/" className="pair-brand"><span aria-hidden="true">✳</span><span>i need a <strong>distraction.</strong></span></Link>
-        <nav aria-label="Agent setup navigation"><Link href="/games">Just play</Link><Link href="/arcade">Open player</Link></nav>
+        <nav aria-label="Agent setup navigation">
+          <Link href={clips ? '/agent' : '/games'}>{clips ? 'Game setup' : 'Just play'}</Link>
+          {!clips && <Link href="/arcade">Open player</Link>}
+        </nav>
       </header>
 
       <main className="pair-main">
+        {clips ? (
+          <section className="pair-hero pair-clips-hero" aria-labelledby="pair-title">
+            <div>
+              <h1 id="pair-title">Family Guy<br /><em>clips.</em></h1>
+              <p className="pair-lede">Watch a scene while Codex or Claude Code works. Your popup rotates through {clipCount} clips and pauses when your agent needs you.</p>
+              <p className="pair-clips-returning">Already paired? Choose <strong>Family Guy clips</strong> in your agent popup. It remembers that choice.</p>
+            </div>
+            <SetupPrompt selection="family-guy" ready={ready} />
+          </section>
+        ) : <>
         <section className="pair-hero" aria-labelledby="pair-title">
           <div className="pair-hero-copy">
             <p className="pair-eyebrow">A LITTLE PLAY WHILE THE WORK GETS DONE</p>
             <h1 id="pair-title">Your agent works.<br /><em>You play.</em></h1>
             <p className="pair-lede">Good games for the in-between. Pick your favorites, pair your agent, and play until it needs you.</p>
             <div className="pair-promises"><span>Free to play</span><span>No account needed</span><span>Always an off switch</span></div>
+            <Link className="pair-clips-link" href="/agent?mode=family-guy">Set up Family Guy clips in your popup ↗</Link>
           </div>
           <div className="pair-hero-art" aria-hidden="true">
             <div className="pair-art-orbit pair-art-orbit-one" />
@@ -138,22 +128,7 @@ export default function AgentClient() {
             )}
           </section>
 
-          <aside className="pair-setup" aria-labelledby="pair-setup-title">
-            <p className="pair-eyebrow">READY WHEN YOU ARE</p>
-            <h2 id="pair-setup-title">Meet your new <br />waiting routine.</h2>
-            <p className="pair-setup-lede">One prompt brings your game mix to your agent.</p>
-            <fieldset className="pair-platform"><legend>Which agent do you use?</legend><div>
-              <button type="button" aria-pressed={platform === 'codex'} onClick={() => { setPlatform('codex'); setCopyError(''); }}>Codex</button>
-              <button type="button" aria-pressed={platform === 'claude'} onClick={() => { setPlatform('claude'); setCopyError(''); }}>Claude Code</button>
-            </div></fieldset>
-            <button type="button" className="pair-primary" disabled={disabled} onClick={copyPrompt}>{copied ? 'Copied! Paste into your agent' : 'Copy my setup prompt'}</button>
-            <div className="pair-copy-feedback" role="status">{copied ? `Paste into ${platformName}. Your paired player opens in its own window.` : games.length === 0 ? 'Choose at least one available game style to continue.' : 'Your choices are included. Change them any time.'}</div>
-            {copyError && <p className="pair-error" role="alert">{copyError}</p>}
-            <button type="button" className="pair-prompt-toggle" aria-expanded={showPrompt} aria-controls="pair-prompt-preview" onClick={() => setShowPrompt(!showPrompt)}>{showPrompt ? 'Hide setup prompt' : 'Read the prompt first'}</button>
-            {showPrompt && <div id="pair-prompt-preview" className="pair-prompt-preview"><label htmlFor="pair-setup-prompt">Your setup prompt for {platformName}</label><textarea id="pair-setup-prompt" ref={promptRef} readOnly value={prompt} rows={9} /><button type="button" className="pair-text-button" onClick={() => { promptRef.current?.focus(); promptRef.current?.select(); }}>Select prompt text</button></div>}
-            <ol className="pair-how"><li><strong>Paste it into your agent.</strong><span>It sets up the plugin and your chosen games.</span></li><li><strong>Complete the setup.</strong><span>{platform === 'codex' ? 'Review and trust the plugin hooks in Codex when prompted.' : 'Review the plugin installation in Claude Code and reload if requested.'}</span></li><li><strong>Play while it works.</strong><span>Your game pauses when that turn finishes or your agent needs you.</span></li></ol>
-            <p className="pair-setup-note">For local Codex and Claude Code sessions. Copying a prompt starts setup; the player confirms the connection.</p>
-          </aside>
+          <SetupPrompt selection={preferences} ready={ready} />
         </div>
 
         <section className="pair-game-preview" aria-labelledby="pair-games-title">
@@ -162,8 +137,59 @@ export default function AgentClient() {
         </section>
 
         <section className="pair-control-note" aria-label="Easy distraction controls"><span aria-hidden="true">✳</span><div><h2>Fun, on your terms.</h2><p>Press <strong>Stop distracting</strong> in the player, or say it to your agent. It stays off until you say <strong>Keep distracting</strong>. Your games and preferences will be waiting.</p></div><Link href="/arcade">Open the player</Link></section>
+        </>}
       </main>
       <footer className="pair-footer"><Link href="/">i need a distraction.</Link><div><Link href="/privacy">Privacy</Link><a href="https://github.com/goodmeasurelabs/ineedadistraction">Plugin source</a></div></footer>
     </div>
+  );
+}
+
+function SetupPrompt({ selection, ready }: { selection: DistractionPreferences | 'family-guy'; ready: boolean }) {
+  const [platform, setPlatform] = useState<'codex' | 'claude'>('codex');
+  const [copiedPrompt, setCopiedPrompt] = useState('');
+  const [failedPrompt, setFailedPrompt] = useState('');
+  const [showPrompt, setShowPrompt] = useState(false);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
+  const platformName = platform === 'codex' ? 'Codex' : 'Claude Code';
+  const clips = selection === 'family-guy';
+  const eligible = clips || getEligibleGames(selection).length > 0;
+  const prompt = clips ? buildSetupPrompt(platform, 'family-guy')
+    : selection.categories.length ? buildSetupPrompt(platform, { ...selection, enabled: true }) : '';
+  const copied = !!prompt && copiedPrompt === prompt;
+  const copyError = !!prompt && failedPrompt === prompt;
+
+  async function copyPrompt() {
+    setFailedPrompt('');
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopiedPrompt(prompt);
+      trackEvent('agent_setup_prompt_copied', clips
+        ? { platform, mode: 'family-guy' }
+        : { platform, categories: selection.categories.join(','), pace: selection.pace });
+    } catch {
+      setShowPrompt(true);
+      setFailedPrompt(prompt);
+    }
+  }
+
+  return (
+    <aside className="pair-setup" aria-labelledby="pair-setup-title">
+      {!clips && <p className="pair-eyebrow">READY WHEN YOU ARE</p>}
+      <h2 id="pair-setup-title">{clips ? 'Pair your agent' : <>Meet your new <br />waiting routine.</>}</h2>
+      <p className="pair-setup-lede">{clips ? 'Copy a prompt and paste it into your local coding agent.' : 'One prompt brings your game mix to your agent.'}</p>
+      <fieldset className="pair-platform"><legend>Which agent do you use?</legend><div>
+        <button type="button" aria-pressed={platform === 'codex'} onClick={() => setPlatform('codex')}>Codex</button>
+        <button type="button" aria-pressed={platform === 'claude'} onClick={() => setPlatform('claude')}>Claude Code</button>
+      </div></fieldset>
+      <button type="button" className="pair-primary" disabled={!ready || !eligible} onClick={copyPrompt}>{copied ? 'Copied! Paste into your agent' : 'Copy my setup prompt'}</button>
+      <div className="pair-copy-feedback" role="status">{copied ? `Paste into ${platformName}. Your paired player opens in its own window.` : !eligible ? 'Choose at least one available game style to continue.' : clips ? 'In the popup, choose “Family Guy clips” to start watching.' : 'Your choices are included. Change them any time.'}</div>
+      {copyError && <p className="pair-error" role="alert">Copy is unavailable in this browser. Select the prompt below and copy it manually.</p>}
+      <button type="button" className="pair-prompt-toggle" aria-expanded={showPrompt} aria-controls="pair-prompt-preview" onClick={() => setShowPrompt(!showPrompt)}>{showPrompt ? 'Hide setup prompt' : 'Read the prompt first'}</button>
+      {showPrompt && <div id="pair-prompt-preview" className="pair-prompt-preview"><label htmlFor="pair-setup-prompt">Your setup prompt for {platformName}</label><textarea id="pair-setup-prompt" ref={promptRef} readOnly value={prompt} rows={9} /><button type="button" className="pair-text-button" onClick={() => { promptRef.current?.focus(); promptRef.current?.select(); }}>Select prompt text</button></div>}
+      {!clips && <>
+        <ol className="pair-how"><li><strong>Paste it into your agent.</strong><span>It sets up the plugin and your chosen games.</span></li><li><strong>Complete the setup.</strong><span>{platform === 'codex' ? 'Review and trust the plugin hooks in Codex when prompted.' : 'Review the plugin installation in Claude Code and reload if requested.'}</span></li><li><strong>Play while it works.</strong><span>Your game pauses when that turn finishes or your agent needs you.</span></li></ol>
+        <p className="pair-setup-note">For local Codex and Claude Code sessions. Copying a prompt starts setup; the player confirms the connection.</p>
+      </>}
+    </aside>
   );
 }

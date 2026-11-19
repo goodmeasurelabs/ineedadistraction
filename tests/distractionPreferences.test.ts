@@ -107,3 +107,13 @@ test('a malformed preference cannot become a usable setup prompt', () => {
   assert.throws(() => buildSetupPrompt('codex', preferences({ categories: [] })));
   assert.throws(() => buildSetupPrompt('claude', { ...preferences(), sound: 'false' } as unknown as DistractionPreferences));
 });
+
+test('Family Guy setup opens the paired popup for either platform and preserves existing settings', () => {
+  for (const platform of ['codex', 'claude'] as const) {
+    const prompt = buildSetupPrompt(platform, 'family-guy');
+    assert.match(prompt, platform === 'codex' ? /codex plugin add distraction@ineedadistraction/ : /claude plugin install distraction@ineedadistraction/);
+    assert.match(prompt, /scripts\/open\.sh/);
+    assert.match(prompt, /Tell me to choose “Family Guy clips” in that popup/);
+    assert.doesNotMatch(prompt, /--enabled|--categories|--pace|--sound|#t=/);
+  }
+});
