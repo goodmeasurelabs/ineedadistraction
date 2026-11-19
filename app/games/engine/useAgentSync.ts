@@ -40,6 +40,7 @@ export function readAgentToken(): string | null {
 
 const QUEUE_UPDATED = 'inad:agent-queue-updated';
 type QueueTarget = Pick<AgentRunSnapshot, 'run' | 'revision'>;
+type AgentPollSnapshot = Omit<AgentSnapshot, 'state'> & { state: AgentSnapshot['state'] | 'unpaired' };
 
 export async function updateAgentQueue(
   action: 'ack' | 'dismiss' | 'focus' | 'clear',
@@ -48,16 +49,30 @@ export async function updateAgentQueue(
 ): Promise<void> {
   const token = readAgentToken();
   if (!token) throw new Error('This browser needs to be paired again.');
-  const response = await fetch(`/api/agent/${token}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action, ...target, ...(items ? { items } : {}) }),
-  });
-  if (!response.ok) {
-    if (response.status === 409) throw new Error('That chat changed. Try its updated entry.');
-    throw new Error('Could not reach your agent. Please try again.');
+  const controller = new AbortController();
+  const deadline = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(`/api/agent/${token}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, ...target, ...(items ? { items } : {}) }),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      if (response.status === 409) throw new Error('That chat changed. Try its updated entry.');
+      throw new Error('Could not reach your agent. Please try again.');
+    }
+    // Receiving headers does not guarantee the body will finish. Keep the
+    // deadline active until the snapshot is ready to release the queue UI.
+    const snapshot: AgentSnapshot = await response.json();
+    window.dispatchEvent(new CustomEvent(QUEUE_UPDATED, { detail: snapshot }));
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('Could not confirm that request in time. It may still have reached your agent. Try again or open your agent directly.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(deadline);
   }
-  const snapshot: AgentSnapshot = await response.json();
-  window.dispatchEvent(new CustomEvent(QUEUE_UPDATED, { detail: snapshot }));
 }
 
 export function useReturnToAgent() {
@@ -85,18 +100,38 @@ export function useReturnToAgent() {
   return { note, back, clear };
 }
 
-export function useAgentSync(): AgentSync {
+export async function readAgentSnapshot(token: string, sequence: number, lifetime: AbortSignal): Promise<AgentPollSnapshot> {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (lifetime.aborted) abort();
+  else lifetime.addEventListener('abort', abort, { once: true });
+  // The server normally holds a poll for 20 seconds. Allow that interval while bounding
+  // stalled connections and response bodies so polling can always recover.
+  const deadline = setTimeout(abort, 30_000);
+  try {
+    const query = sequence >= 0 ? `?seq=${sequence}` : '';
+    const response = await fetch(`/api/agent/${token}${query}`, { signal: controller.signal, cache: 'no-store' });
+    if (!response.ok) throw new Error(String(response.status));
+    return await response.json();
+  } finally {
+    clearTimeout(deadline);
+    lifetime.removeEventListener('abort', abort);
+  }
+}
+
+export function useAgentSync(enabled = true): AgentSync {
   const [sync, setSync] = useState<AgentSync>(INITIAL);
   const seqRef = useRef(-1);
 
   useEffect(() => {
+    if (!enabled) return;
     const token = readAgentToken();
     if (!token) return;
     let alive = true;
     const controller = new AbortController();
     setSync((s) => ({ ...s, paired: true }));
 
-    const accept = (data: AgentSnapshot) => {
+    const accept = (data: AgentPollSnapshot) => {
       if (!alive || data.seq < seqRef.current) return;
       seqRef.current = data.seq;
       setSync((prev) => ({
@@ -113,10 +148,7 @@ export function useAgentSync(): AgentSync {
     (async () => {
       while (alive) {
         try {
-          const query = seqRef.current >= 0 ? `?seq=${seqRef.current}` : '';
-          const response = await fetch(`/api/agent/${token}${query}`, { signal: controller.signal, cache: 'no-store' });
-          if (!response.ok) throw new Error(String(response.status));
-          const data = await response.json();
+          const data = await readAgentSnapshot(token, seqRef.current, controller.signal);
           if (!alive) return;
           accept(data);
           // Nothing reported yet: the first poll returns straight away, so wait before asking again.
@@ -129,7 +161,7 @@ export function useAgentSync(): AgentSync {
     })();
 
     return () => { alive = false; controller.abort(); window.removeEventListener(QUEUE_UPDATED, onUpdate); };
-  }, []);
+  }, [enabled]);
 
   return sync;
 }

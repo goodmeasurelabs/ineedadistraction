@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400" fill="none">
+<defs><linearGradient id="bg" x2="640" y2="400" gradientUnits="userSpaceOnUse"><stop stop-color="#351060"/><stop offset="1" stop-color="#090e2e"/></linearGradient><radialGradient id="pink" cx=".3" cy=".2" r=".85"><stop stop-color="#ffd0f1"/><stop offset=".35" stop-color="#ff6ec8"/><stop offset="1" stop-color="#a41a95"/></radialGradient><radialGradient id="blue" cx=".3" cy=".2" r=".85"><stop stop-color="#d8ffff"/><stop offset=".35" stop-color="#59d9ff"/><stop offset="1" stop-color="#196baa"/></radialGradient><radialGradient id="yellow" cx=".3" cy=".2" r=".85"><stop stop-color="#ffffcf"/><stop offset=".4" stop-color="#ffe473"/><stop offset="1" stop-color="#ec8a34"/></radialGradient><filter id="glow"><feGaussianBlur stdDeviation="25"/></filter></defs>
+<path fill="url(#bg)" d="M0 0h640v400H0z"/><circle cx="346" cy="211" r="147" fill="#a12ca6" opacity=".28" filter="url(#glow)"/>
+<g stroke="#fff" opacity=".09"><path d="M0 340h640M0 300h640M0 260h640M0 220h640M0 180h640M100 0v400M200 0v400M300 0v400M400 0v400M500 0v400M600 0v400"/></g>
+<path d="M176 61v259q0 29 29 29h290q29 0 29-29V61" stroke="#b490f9" stroke-width="3" opacity=".45"/>
+<ellipse cx="347" cy="349" rx="156" ry="17" fill="#0a0927" opacity=".7"/>
+<circle cx="278" cy="265" r="77" fill="url(#pink)"/><circle cx="411" cy="278" r="63" fill="url(#blue)"/><circle cx="448" cy="165" r="49" fill="url(#pink)"/><circle cx="345" cy="146" r="55" fill="url(#yellow)"/>
+<g fill="#321349" font-family="Arial,sans-serif" font-weight="700" text-anchor="middle"><text x="278" y="284" font-size="56">16</text><text x="411" y="296" font-size="48" fill="#103159">8</text><text x="448" y="180" font-size="40">4</text><text x="345" y="164" font-size="47" fill="#75421c">32</text></g>
+<circle cx="123" cy="145" r="29" fill="url(#blue)"/><circle cx="554" cy="285" r="18" fill="url(#yellow)"/><path d="m119 70 4 13 13 4-13 4-4 13-4-13-13-4 13-4zm410 13 3 10 10 3-10 3-3 10-3-10-10-3 10-3z" fill="#fff0c4"/><circle cx="85" cy="269" r="4" fill="#ff9bd7"/><circle cx="568" cy="134" r="5" fill="#a5edff"/>
+</svg>

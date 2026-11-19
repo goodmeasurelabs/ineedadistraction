@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400" fill="none">
+<defs><linearGradient id="bg" x2="640" y2="400" gradientUnits="userSpaceOnUse"><stop stop-color="#071f54"/><stop offset="1" stop-color="#38195f"/></linearGradient><radialGradient id="pulse"><stop stop-color="#eaffff"/><stop offset=".25" stop-color="#74f6ff"/><stop offset="1" stop-color="#3271ff" stop-opacity="0"/></radialGradient><filter id="blur"><feGaussianBlur stdDeviation="8"/></filter></defs>
+<path fill="url(#bg)" d="M0 0h640v400H0z"/><g stroke="#7687cc" stroke-opacity=".16"><path d="M320 260 0 400m320-140L100 400m220-140L240 400m80-140 80 140m-80-140 220 140m-220-140 320 140M0 292h640M0 335h640M0 389h640"/></g>
+<g stroke-linecap="round"><path d="m315 194 122-72m-122 72-113-73m113 73-113 86m113-86 122 88" stroke="#8aebff" stroke-width="2" stroke-dasharray="6 9" opacity=".7"/><path d="m437 122 88 28m-323-29-89 50m89 109-52 49m287-47 88-38" stroke="#caaaee" stroke-width="2" stroke-dasharray="4 9" opacity=".45"/></g>
+<circle cx="315" cy="194" r="117" fill="url(#pulse)"/><circle cx="315" cy="194" r="69" stroke="#67ecff" stroke-width="2" opacity=".8"/><circle cx="315" cy="194" r="94" stroke="#7d9aff" stroke-width="2" opacity=".5"/>
+<g fill="#81f6ff"><circle cx="315" cy="194" r="23"/><circle cx="437" cy="122" r="13"/><circle cx="202" cy="121" r="11"/></g><g fill="#ffb57f"><circle cx="202" cy="280" r="15"/><circle cx="525" cy="244" r="8"/></g><g fill="#cfa6ff"><circle cx="437" cy="282" r="12"/><circle cx="113" cy="171" r="8"/><circle cx="525" cy="150" r="9"/></g>
+<g stroke-width="5" stroke-linecap="round"><path d="m315 156 0-17m0 110v-17m-38-38h-17m110 0h-17" stroke="#e6ffff"/><path d="m188 266-9-9m38 38 9 9m-38-10-9 9m38-38 9-9" stroke="#ffd9a2"/></g>
+<g fill="#c5eeff" opacity=".7"><circle cx="74" cy="65" r="2"/><circle cx="149" cy="43" r="3"/><circle cx="354" cy="51" r="2"/><circle cx="553" cy="67" r="3"/><circle cx="585" cy="301" r="2"/><circle cx="83" cy="289" r="2"/></g>
+<text x="464" y="80" fill="#e6c6ff" font-family="Arial,sans-serif" font-size="27" font-weight="700" transform="rotate(8 464 80)">COMBO!</text>
+</svg>

@@ -1306,6 +1306,7 @@ body {
 .agent-queue-row small, .agent-queue-row time { color: #a7b2c6; font-size: 12px; }
 .agent-queue-row p { margin: 3px 0; }
 .agent-queue-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.agent-queue-manual { max-width: 150px; align-self: center; text-align: right; font-size: 12px; color: #a7b2c6; }
 .agent-queue button { border: 1px solid #445168; color: #e5e7eb; background: #1e2737; padding: 7px 10px; border-radius: 7px; cursor: pointer; font: inherit; }
 .agent-queue button:disabled { opacity: .5; cursor: default; }
 .agent-queue .agent-queue-clear { margin-bottom: 12px; }

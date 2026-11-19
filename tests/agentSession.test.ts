@@ -73,6 +73,39 @@ test('working runs expire independently and old requests remain clearable withou
   ]);
 });
 
+test('orphaned legacy approvals stay clearable without interrupting a new prompt', () => {
+  const orphan = run('legacy-approval', 'waiting', 'permission', 0, {
+    updatedAt: new Date(now - 31 * 60 * 1000), returnTarget: null,
+  });
+  const active = run('active', 'working', 'prompt', 4, { promptAt: new Date(now - 100) });
+  const queue = buildAgentQueue([orphan, active], now);
+  assert.equal(queue.notice, null);
+  assert.equal(queue.waiting, 0);
+  assert.equal(queue.state, 'working');
+  assert.equal(queue.foregroundRun, 'active');
+  assert.equal(queue.runs.find((item) => item.run === orphan.run)?.statusUnconfirmed, true);
+  assert.equal(queue.runs.find((item) => item.run === orphan.run)?.dismissed, false);
+  assert.equal(queue.runs.find((item) => item.run === orphan.run)?.returnTarget, 'unavailable');
+});
+
+test('fresh legacy approvals, questions and evidenced approvals remain real blockers', () => {
+  const old = new Date(now - 31 * 60 * 1000);
+  const cases = [
+    run('fresh-legacy', 'waiting', 'permission', 1, { returnTarget: null }),
+    run('legacy-question', 'waiting', 'question', 1, { updatedAt: old, returnTarget: null }),
+    run('event-approval', 'waiting', 'permission', 1, { updatedAt: old, returnTarget: null, eventId: 'permission-event', eventAt: old }),
+    run('prompt-approval', 'waiting', 'permission', 1, { updatedAt: old, returnTarget: null, promptAt: old }),
+    run('routed-approval', 'waiting', 'permission', 1, { updatedAt: old }),
+    run('explicitly-unroutable', 'waiting', 'permission', 1, { updatedAt: old, returnTarget: 'unavailable' }),
+  ];
+  for (const request of cases) {
+    const queue = buildAgentQueue([request], now);
+    assert.equal(queue.waiting, 1, request.run);
+    assert.equal(queue.notice?.run, request.run);
+    assert.equal(queue.runs[0].statusUnconfirmed, undefined, request.run);
+  }
+});
+
 test('completion with prompt metadata can be followed before its working update is observed', () => {
   const report = readAgentReport({
     state: 'waiting', reason: 'done', eventId: 'end-xyz', eventAt: now - 5, promptAt: now - 10, agent: 'codex', returnTarget: 'chat',

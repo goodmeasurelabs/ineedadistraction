@@ -14,10 +14,11 @@
 # it opens as a normal tab.
 DIR="${INAD_HOME:-$HOME/.config/ineedadistraction}"
 BASE="${INAD_URL:-https://www.ineedadistraction.com}"
+HERE=$(cd "$(dirname "$0")" 2>/dev/null && pwd)
 umask 077
 mkdir -p "$DIR" || exit 1
 if [ ! -s "$DIR/token" ]; then od -An -N16 -tx1 /dev/urandom | tr -d ' \n' > "$DIR/token"; fi
-URL="$BASE/agent#t=$(cat "$DIR/token")"
+URL="$BASE/arcade#t=$(cat "$DIR/token")"
 
 case "$1" in
   --print) echo "$URL"; exit 0 ;;
@@ -25,6 +26,15 @@ case "$1" in
   --resurface) QUIET=1; RESURFACE=1 ;;
   *) QUIET=0 ;;
 esac
+
+# Explicit opens may show the saved Off screen; automatic opens must respect
+# durable local settings before raising any browser window.
+if command -v python3 >/dev/null 2>&1; then
+  python3 "$HERE/settings.py" local >/dev/null 2>&1
+  : > "$DIR/settings-wake"
+  (exec nohup python3 "$HERE/settings.py" listen) </dev/null >/dev/null 2>&1 &
+fi
+[ "$QUIET" = 1 ] && { [ -f "$DIR/off" ] || [ -f "$DIR/no-auto-open" ]; } && exit 0
 
 if [ "$(uname)" = "Darwin" ] && [ ! -f "$DIR/off" ] && [ ! -f "$DIR/no-return" ]; then
   (exec nohup sh "$(dirname "$0")/state.sh" --listen) </dev/null >/dev/null 2>&1 &
@@ -45,17 +55,24 @@ if [ ! -f "$DIR/no-popup" ] && [ "$(uname)" = "Darwin" ]; then
   }
   # One pop-up, not one per call: if it is already open, resurface it.
   PID=$(popup_pid)
+  [ "$QUIET" = 1 ] && [ -f "$DIR/off" ] && exit 0
   if [ -n "$PID" ] && [ "$(osascript -l JavaScript "$RAISE" front "$PID" 2>/dev/null)" = ok ]; then
     [ "$QUIET" = 1 ] || echo "$URL"; exit 0
   fi
   PLACE=$(osascript -l JavaScript "$RAISE" place 2>/dev/null)
   for APP in "Google Chrome" "Brave Browser" "Microsoft Edge" "Chromium"; do
     if [ -d "/Applications/$APP.app" ] || [ -d "$HOME/Applications/$APP.app" ]; then
+      [ "$QUIET" = 1 ] && [ -f "$DIR/off" ] && exit 0
       if open -na "$APP" --args "--user-data-dir=$PROFILE" --no-first-run --no-default-browser-check \
            "--app=$URL&popup" --window-size=460,800 ${PLACE:+"--window-position=$PLACE"}; then
         # A new instance comes up in front by itself. One that was left running
         # with its window closed does not, so make sure either way.
-        ( sleep 1; PID=$(popup_pid); [ -n "$PID" ] && osascript -l JavaScript "$RAISE" front "$PID" wait ) >/dev/null 2>&1 &
+        (
+          sleep 1
+          [ "$QUIET" = 1 ] && [ -f "$DIR/off" ] && exit 0
+          PID=$(popup_pid)
+          [ -n "$PID" ] && osascript -l JavaScript "$RAISE" front "$PID" wait
+        ) >/dev/null 2>&1 &
         [ "$QUIET" = 1 ] || echo "$URL"; exit 0
       fi
     fi

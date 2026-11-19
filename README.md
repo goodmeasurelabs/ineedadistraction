@@ -4,7 +4,7 @@ Games built to be hard to put down, at [ineedadistraction.com](https://www.ineed
 
 ## Play while your agent works (Codex and Claude Code)
 
-The game pauses when the turn you are waiting for finishes or an agent needs input. Keep playing to dismiss the interruption, open a recent chat to review its result, or use the input queue to return to a question or approval.
+The game pauses when the turn you are waiting for finishes or an agent needs input. Resume this game to dismiss the interruption, open a recent chat to review its result, or use the input queue to return to a question or approval.
 
 **Claude Code**
 
@@ -36,7 +36,25 @@ Codex's permission hook fires before its automatic reviewer. Shell and patch per
 
 The plugin reports the state and reason, agent label, checksum of the session ID, opaque event ID, timestamps, and return target type using a locally generated pairing token. Chat titles, contents, and actual chat or terminal pane IDs stay on the machine. See [state.sh](plugin/scripts/state.sh).
 
-**Controls:** `touch ~/.config/ineedadistraction/no-auto-open` stops the arcade opening by itself; `touch ~/.config/ineedadistraction/off` turns the sync off.
+**Controls:** Say **“Stop distracting”** to persistently stop automatic popups, or **“Keep distracting”** to enable them again. The popup has the same controls and a **Change games** drawer. **Resume this game** only dismisses the current interruption.
+
+Plugin 0.5.0 adds a versioned preferences helper (Python 3 required):
+
+```sh
+python3 <installed-plugin>/scripts/settings.py off
+python3 <installed-plugin>/scripts/settings.py on
+python3 <installed-plugin>/scripts/settings.py set --categories merge,logic --pace untimed --sound false
+python3 <installed-plugin>/scripts/settings.py show
+python3 <installed-plugin>/scripts/settings.py sync
+```
+
+Settings apply to this paired computer across Codex and Claude Code. Local commands apply immediately and retry pending synchronization; the popup confirms a durable change only after the local plugin acknowledges it. Off suppresses automatic opening and game notifications while retaining current agent status and a control connection. Older `off`/`no-auto-open` flags migrate to Off; use the helper to turn it back on.
+
+Website setup stays at `/agent`; the focused popup starts at `/arcade`. Its separate browser profile receives the chosen mix through the plugin. `open.sh` starts a settings listener even when Off or return-to-agent is disabled. It stops after five minutes without an attached player and restarts on explicit opening or a new prompt. `open.sh --print` only prints the link.
+
+**Updating:** In Codex, run `codex plugin marketplace upgrade ineedadistraction`, then `codex plugin add distraction@ineedadistraction`. In Claude Code, run `claude plugin marketplace update ineedadistraction`, then `claude plugin update distraction@ineedadistraction`. Follow any client restart or hook-review instructions, then refresh the distraction popup once (Cmd+R / Ctrl+R) to load the new controls. Opening it again only brings the existing window forward. Older plugins can still play while being updated.
+
+Legacy approval records without event or return metadata become unconfirmed history after 30 minutes. They remain clearable, but do not interrupt new work. Current versioned approvals and questions retain their normal queue behavior.
 
 ## The games
 

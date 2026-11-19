@@ -197,3 +197,16 @@ model AgentRun {
 
   @@id([token, run])
 }
+
+// Desired distraction settings and the last revision durably applied by the
+// local plugin. Separate from agent runs: a prompt must never reset Off.
+model AgentPreferences {
+  token           String    @id
+  settings        Json
+  revision        Int       @default(1)
+  appliedRevision Int       @default(1)
+  pluginSeenAt    DateTime?
+  pluginVersion   String?
+  lastMutationId  String?
+  updatedAt       DateTime  @updatedAt
+}

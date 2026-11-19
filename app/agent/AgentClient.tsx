@@ -1,113 +1,169 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
-import GameShelf from '../games/GameShelf';
-import { AGENT_TOKEN_KEY, readAgentToken, useAgentSync } from '../games/engine/useAgentSync';
-import { getGame } from '../games/registry';
+import DistractionPreferencesPicker from '../components/DistractionPreferencesPicker';
+import { readAgentToken } from '../games/engine/useAgentSync';
+import {
+  DEFAULT_DISTRACTION_PREFERENCES, buildSetupPrompt, getEligibleGames,
+  parseDistractionPreferences, type DistractionPreferences,
+} from '../lib/distractionPreferences';
+import { useDistractionSettings } from '../lib/useDistractionSettings';
 import { trackEvent } from '../lib/analytics';
 
-const INSTALL = {
-  codex: ['codex plugin marketplace add goodmeasurelabs/ineedadistraction', 'codex plugin add distraction@ineedadistraction', '# then open Codex and run /hooks once to review and trust the plugin hooks'],
-  claude: ['/plugin marketplace add goodmeasurelabs/ineedadistraction', '/plugin install distraction@ineedadistraction'],
-};
-
-function Status() {
-  const agent = useAgentSync();
-  const label = agent.state === 'working' ? 'Your agent is working. Go play.'
-    : agent.state === 'waiting' ? 'Your agent is waiting on you.'
-    : agent.state === 'idle' ? 'Your agent is idle.'
-    : 'Paired. Waiting for your agent’s first signal: send it a prompt.';
-  return <p className={`pair-status pair-${agent.state}`} role="status"><i aria-hidden="true" />{label}</p>;
-}
-
-function Copy({ text }: { text: string }) {
-  const [done, setDone] = useState(false);
-  return (
-    <button className="pair-copy" onClick={async () => { try { await navigator.clipboard.writeText(text); setDone(true); setTimeout(() => setDone(false), 1600); } catch { /* select and copy by hand */ } }}>
-      {done ? 'Copied' : 'Copy'}
-    </button>
-  );
-}
+const DRAFT_KEY = 'inad:setup-preferences:v1';
 
 export default function AgentClient() {
-  // null = still checking (avoids flashing the install steps at paired visitors)
-  const [paired, setPaired] = useState<boolean | null>(null);
-  const [justPaired, setJustPaired] = useState(false);
-  const [tab, setTab] = useState<'codex' | 'claude'>('codex');
+  const [platform, setPlatform] = useState<'codex' | 'claude'>('codex');
+  const [preferences, setPreferences] = useState<DistractionPreferences>(DEFAULT_DISTRACTION_PREFERENCES);
+  const [hasToken, setHasToken] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [copiedPrompt, setCopiedPrompt] = useState('');
+  const [copyError, setCopyError] = useState('');
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [saveNote, setSaveNote] = useState('');
+  const dirty = useRef(false);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
+  const sync = useDistractionSettings();
 
   useEffect(() => {
-    // The plugin opens /agent#t=<token>, plus &popup when it opened a chromeless
-    // window (page.tsx shapes that). The fragment never reaches the server.
-    const match = window.location.hash.match(/^#t=([A-Za-z0-9_-]{20,64})(&popup)?$/);
-    if (match) {
-      try { localStorage.setItem(AGENT_TOKEN_KEY, match[1]); } catch { /* handled below */ }
-      window.history.replaceState(null, '', window.location.pathname);
-      trackEvent('agent_paired', {});
-      let last: string | null = null;
-      try { last = localStorage.getItem('inad:last-game'); } catch { /* optional */ }
-      if (readAgentToken() && last && getGame(last)) { window.location.replace(`/games/${last}`); return; }
-      setJustPaired(true);
+    // Older plugins opened setup. Keep the secret in the fragment and let the
+    // dedicated player consume it rather than turning the website into a popup.
+    if (/^#t=[A-Za-z0-9_-]{20,64}(&popup)?$/.test(window.location.hash)) {
+      window.location.replace(`/arcade${window.location.search}${window.location.hash}`);
+      return;
     }
-    setPaired(!!readAgentToken());
+    setHasToken(!!readAgentToken());
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY);
+      const parsed = saved ? parseDistractionPreferences(JSON.parse(saved)) : null;
+      if (parsed) setPreferences(parsed);
+    } catch { /* The copied prompt works without browser storage. */ }
+    setReady(true);
   }, []);
 
-  function unpair() {
-    try { localStorage.removeItem(AGENT_TOKEN_KEY); } catch { /* nothing stored */ }
-    setPaired(false); setJustPaired(false);
+  useEffect(() => {
+    if (ready && sync.settings && !dirty.current) setPreferences(sync.settings);
+  }, [ready, sync.settings]);
+
+  function changePreferences(next: DistractionPreferences) {
+    dirty.current = true;
+    setPreferences(next);
+    setSaveNote('');
+    setCopyError('');
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify(next)); } catch { /* optional */ }
+  }
+
+  const games = getEligibleGames(preferences);
+  const platformName = platform === 'codex' ? 'Codex' : 'Claude Code';
+  const prompt = preferences.categories.length ? buildSetupPrompt(platform, { ...preferences, enabled: true }) : '';
+  const copied = !!prompt && copiedPrompt === prompt;
+  const disabled = !ready || games.length === 0;
+
+  async function copyPrompt() {
+    setCopyError('');
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopiedPrompt(prompt);
+      trackEvent('agent_setup_prompt_copied', {
+        platform, categories: preferences.categories.join(','), pace: preferences.pace,
+      });
+    } catch {
+      setShowPrompt(true);
+      setCopyError('Copy is unavailable in this browser. Select the prompt below and copy it manually.');
+    }
+  }
+
+  async function savePreferences() {
+    setSaveNote('');
+    const saved = await sync.save({ ...preferences, enabled: sync.settings?.enabled ?? preferences.enabled });
+    if (saved) { dirty.current = false; setSaveNote('Your game mix is saved on this computer.'); }
+  }
+
+  async function toggleDistractions() {
+    if (!sync.settings) return;
+    setSaveNote('');
+    await sync.save({ ...sync.settings, enabled: !sync.settings.enabled });
   }
 
   return (
     <div className="pair-page">
       <header className="pair-nav">
-        <Link href="/" className="pair-brand"><span aria-hidden="true">✳</span> i need a <strong>distraction.</strong></Link>
-        <Link href="/" className="pair-link">All games</Link>
+        <Link href="/" className="pair-brand"><span aria-hidden="true">✳</span><span>i need a <strong>distraction.</strong></span></Link>
+        <nav aria-label="Agent setup navigation"><Link href="/games">Just play</Link><Link href="/arcade">Open player</Link></nav>
       </header>
 
       <main className="pair-main">
-        <section className="pair-hero">
-          <p className="pair-eyebrow">FOR CODEX AND CLAUDE CODE</p>
-          <h1>Your agent works.<br /><em>You play.</em></h1>
-          <p className="pair-lede">Send a prompt and a game opens beside your agent. When that turn finishes, the game tells you. Questions and approvals stay in your input queue, with a button to return to each chat.</p>
-          {paired && <Status />}
+        <section className="pair-hero" aria-labelledby="pair-title">
+          <div className="pair-hero-copy">
+            <p className="pair-eyebrow">A LITTLE PLAY WHILE THE WORK GETS DONE</p>
+            <h1 id="pair-title">Your agent works.<br /><em>You play.</em></h1>
+            <p className="pair-lede">Good games for the in-between. Pick your favorites, pair your agent, and play until it needs you.</p>
+            <div className="pair-promises"><span>Free to play</span><span>No account needed</span><span>Always an off switch</span></div>
+          </div>
+          <div className="pair-hero-art" aria-hidden="true">
+            <div className="pair-art-orbit pair-art-orbit-one" />
+            <div className="pair-art-orbit pair-art-orbit-two" />
+            <div className="pair-art-tile pair-art-tile-merge"><span>2</span><span>4</span><span>8</span></div>
+            <div className="pair-art-tile pair-art-tile-shapes"><i /><i /><i /><i /><i /></div>
+            <div className="pair-art-tile pair-art-tile-sparks">✺</div>
+            <div className="pair-art-caption">Small breaks. Your kind of fun.</div>
+          </div>
         </section>
 
-        {paired ? (
-          <section>
-            <h2 className="pair-h2">{justPaired ? 'Paired. Pick your game.' : 'Pick your game.'}</h2>
-            <GameShelf location="agent" />
-            <p className="pair-foot">This browser is paired with your agent. <button onClick={unpair}>Unpair</button></p>
+        {hasToken && (
+          <section className="pair-connected" aria-label="Paired computer controls">
+            <div>
+              <p className="pair-connected-label">THIS PAIRED COMPUTER</p>
+              <h2>{sync.pending ? 'Applying your change…' : sync.settings ? `Distractions ${sync.settings.enabled ? 'on' : 'off'}` : 'Checking your plugin…'}</h2>
+              <p>{sync.connected ? 'Your plugin is connected. You can update this computer here.' : 'Open the player through your agent to reconnect. You can still prepare a setup prompt below.'}</p>
+            </div>
+            <div className="pair-connected-actions">
+              <button type="button" className="pair-secondary" disabled={!sync.settings || sync.saving || (sync.settings.enabled === false && (!sync.connected || sync.pending))} onClick={toggleDistractions}>{sync.settings?.enabled === false ? 'Keep distracting' : 'Stop distracting'}</button>
+              <Link href="/arcade">Open my player</Link>
+            </div>
+            {sync.error && <p className="pair-error" role="alert">{sync.error}</p>}
           </section>
-        ) : paired === false ? (
-          <>
-            <section className="pair-steps">
-              <div className="pair-tabs" role="tablist">
-                <button role="tab" aria-selected={tab === 'codex'} onClick={() => setTab('codex')}>Codex</button>
-                <button role="tab" aria-selected={tab === 'claude'} onClick={() => setTab('claude')}>Claude Code</button>
+        )}
+
+        <div className="pair-workspace">
+          <section className="pair-preferences" aria-labelledby="pair-mix-title">
+            <div className="pair-section-heading"><p className="pair-eyebrow">MAKE IT YOURS</p><h2 id="pair-mix-title">What feels like a break?</h2><p>Choose a few favorites, or let us surprise you.</p></div>
+            <DistractionPreferencesPicker value={preferences} onChange={changePreferences} disabled={!ready || sync.saving} />
+            {hasToken && sync.settings && (
+              <div className="pair-save-row">
+                <button type="button" className="pair-secondary" onClick={savePreferences} disabled={!sync.connected || sync.pending || games.length === 0}>{sync.pending ? 'Saving…' : 'Save my game mix'}</button>
+                <p role="status">{saveNote || 'Changes apply to your next game. Your current run stays saved.'}</p>
               </div>
-              <ol>
-                <li>
-                  <strong>Install the plugin</strong>
-                  <div className="pair-code"><pre>{INSTALL[tab].join('\n')}</pre><Copy text={INSTALL[tab].filter((line) => !line.startsWith('#')).join('\n')} /></div>
-                </li>
-                <li><strong>Send your agent any prompt.</strong> The arcade opens in your browser, already paired. Or ask it: <q>open my distraction</q>.</li>
-                <li><strong>Play.</strong> When the agent needs you, the game pauses, the tab title flashes and a chime plays.</li>
-              </ol>
-            </section>
+            )}
+          </section>
 
-            <section className="pair-facts">
-              <div><h3>Pick up where you left off</h3><p>The arcade pauses for your current turn and new input requests. Keep playing dismisses the interruption, and recent chats stay available.</p></div>
-              <div><h3>Private by design</h3><p>The plugin shares status, timing, agent type, return capability and opaque identifiers. Chat contents and return destinations stay on your machine.</p></div>
-              <div><h3>Easy to switch off</h3><p>Ask your agent to turn the distraction off, or stop it opening by itself. One file, no account.</p></div>
-            </section>
+          <aside className="pair-setup" aria-labelledby="pair-setup-title">
+            <p className="pair-eyebrow">READY WHEN YOU ARE</p>
+            <h2 id="pair-setup-title">Meet your new <br />waiting routine.</h2>
+            <p className="pair-setup-lede">One prompt brings your game mix to your agent.</p>
+            <fieldset className="pair-platform"><legend>Which agent do you use?</legend><div>
+              <button type="button" aria-pressed={platform === 'codex'} onClick={() => { setPlatform('codex'); setCopyError(''); }}>Codex</button>
+              <button type="button" aria-pressed={platform === 'claude'} onClick={() => { setPlatform('claude'); setCopyError(''); }}>Claude Code</button>
+            </div></fieldset>
+            <button type="button" className="pair-primary" disabled={disabled} onClick={copyPrompt}>{copied ? 'Copied! Paste into your agent' : 'Copy my setup prompt'}</button>
+            <div className="pair-copy-feedback" role="status">{copied ? `Paste into ${platformName}. Your paired player opens in its own window.` : games.length === 0 ? 'Choose at least one available game style to continue.' : 'Your choices are included. Change them any time.'}</div>
+            {copyError && <p className="pair-error" role="alert">{copyError}</p>}
+            <button type="button" className="pair-prompt-toggle" aria-expanded={showPrompt} aria-controls="pair-prompt-preview" onClick={() => setShowPrompt(!showPrompt)}>{showPrompt ? 'Hide setup prompt' : 'Read the prompt first'}</button>
+            {showPrompt && <div id="pair-prompt-preview" className="pair-prompt-preview"><label htmlFor="pair-setup-prompt">Your setup prompt for {platformName}</label><textarea id="pair-setup-prompt" ref={promptRef} readOnly value={prompt} rows={9} /><button type="button" className="pair-text-button" onClick={() => { promptRef.current?.focus(); promptRef.current?.select(); }}>Select prompt text</button></div>}
+            <ol className="pair-how"><li><strong>Paste it into your agent.</strong><span>It sets up the plugin and your chosen games.</span></li><li><strong>Complete the setup.</strong><span>{platform === 'codex' ? 'Review and trust the plugin hooks in Codex when prompted.' : 'Review the plugin installation in Claude Code and reload if requested.'}</span></li><li><strong>Play while it works.</strong><span>Your game pauses when that turn finishes or your agent needs you.</span></li></ol>
+            <p className="pair-setup-note">For local Codex and Claude Code sessions. Copying a prompt starts setup; the player confirms the connection.</p>
+          </aside>
+        </div>
 
-            <section>
-              <h2 className="pair-h2">Or just play now.</h2>
-              <GameShelf location="agent" />
-            </section>
-          </>
-        ) : null}
+        <section className="pair-game-preview" aria-labelledby="pair-games-title">
+          <div className="pair-section-heading pair-games-heading"><div><p className="pair-eyebrow">YOUR MIX, RIGHT NOW</p><h2 id="pair-games-title">A little preview of the fun.</h2></div><p>{games.length ? `${games.length} ${games.length === 1 ? 'game matches' : 'games match'} your choices. Try one in your browser.` : 'Make a new mix to see what you can play.'}</p></div>
+          {games.length ? <div className="pair-game-grid">{games.map(game => <Link key={game.slug} href={`/games/${game.slug}`} className="pair-game-card" style={{ '--game-accent': game.accent } as CSSProperties}><div className="pair-game-art">{/* eslint-disable-next-line @next/next/no-img-element */}<img src={`/shelf/${game.slug}.jpg`} alt="" loading="lazy" /><span className="pair-game-play">Play</span></div><div><h3>{game.title}</h3><p>{game.tagline}</p><small>{game.pace}</small></div></Link>)}</div> : <div className="pair-empty"><h3>No games in this mix yet.</h3><p>Select another category or turn off “No timer” to find your next game.</p></div>}
+        </section>
+
+        <section className="pair-control-note" aria-label="Easy distraction controls"><span aria-hidden="true">✳</span><div><h2>Fun, on your terms.</h2><p>Press <strong>Stop distracting</strong> in the player, or say it to your agent. It stays off until you say <strong>Keep distracting</strong>. Your games and preferences will be waiting.</p></div><Link href="/arcade">Open the player</Link></section>
       </main>
+      <footer className="pair-footer"><Link href="/">i need a distraction.</Link><div><Link href="/privacy">Privacy</Link><a href="https://github.com/goodmeasurelabs/ineedadistraction">Plugin source</a></div></footer>
     </div>
   );
 }

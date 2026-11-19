@@ -19,6 +19,8 @@ export type AgentRunSnapshot = {
   acknowledged: boolean;
   dismissed: boolean;
   returnTarget: AgentReturnTarget;
+  /** An older legacy approval has no event or routing evidence to confirm it. */
+  statusUnconfirmed?: boolean;
 };
 
 export type AgentSnapshot = {
@@ -125,10 +127,18 @@ export function buildAgentQueue(rows: RunRow[], now: number): Pick<
     const persistent = isAgentBlocker({ state, reason }) && !row.dismissed;
     if (!persistent && age >= (state === 'working' ? RUN_STALE_MS : RUN_HISTORY_MS)) continue;
     const reportedTarget = cleanReturnTarget(row.returnTarget) ?? (age < LEGACY_RETURN_MS ? 'app' : 'unavailable');
+    // Before versioned reports, orphaned permission rows could survive a
+    // closed session and interrupt every future visit. With no event, prompt,
+    // or route metadata there is no evidence that an old approval is still
+    // actionable. Keep it clearable without announcing a current blocker.
+    // Questions and versioned approvals retain their existing lifecycle.
+    const statusUnconfirmed = state === 'waiting' && reason === 'permission' &&
+      !row.eventId && !row.eventAt && !row.promptAt && !cleanReturnTarget(row.returnTarget) && age >= LEGACY_RETURN_MS;
     const run: AgentRunSnapshot = {
       run: row.run, state, reason, agent: row.agent, updatedAt, revision: row.revision,
       promptAt: row.promptAt?.getTime() ?? 0, acknowledged: row.acknowledged, dismissed: row.dismissed,
       returnTarget: age < RUN_HISTORY_MS ? reportedTarget : 'unavailable',
+      ...(statusUnconfirmed ? { statusUnconfirmed: true } : {}),
     };
     // A closed foreground stays selected until a fresh prompt. A background
     // session finishing after it closes must not steal the foreground.
@@ -139,8 +149,8 @@ export function buildAgentQueue(rows: RunRow[], now: number): Pick<
 
   runs.sort((a, b) => b.revision - a.revision || b.updatedAt - a.updatedAt);
   const working = runs.filter((run) => run.state === 'working');
-  const blockers = runs.filter((run) => isAgentBlocker(run) && !run.dismissed);
-  const notice = runs.find((run) => !run.acknowledged && !run.dismissed && now - run.updatedAt < RUN_HISTORY_MS &&
+  const blockers = runs.filter((run) => isAgentBlocker(run) && !run.dismissed && !run.statusUnconfirmed);
+  const notice = runs.find((run) => !run.acknowledged && !run.dismissed && !run.statusUnconfirmed && now - run.updatedAt < RUN_HISTORY_MS &&
     (isAgentBlocker(run) || (run === foreground && isAgentCompletion(run)))) ?? null;
   const lead = blockers[0] ?? working[0] ?? (foreground && isAgentCompletion(foreground) ? foreground : undefined);
   return {

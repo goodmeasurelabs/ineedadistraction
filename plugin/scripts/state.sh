@@ -99,6 +99,7 @@ fi
 
 # A new shell gives the background sender its own $$ (a plain (...) does not).
 if [ "$STATE" = "--send" ]; then
+  [ -f "$DIR/off" ] && [ ! -f "$DIR/settings.json" ] && exit 0
   SESSION="$REASON"; SID="$3"
   DIR=$(cd "$DIR" 2>/dev/null && pwd -P) || exit 0
   INAD_HOME="$DIR"
@@ -118,7 +119,7 @@ if [ "$STATE" = "--send" ]; then
   [ -n "$REPLY" ] || exit 0
   printf '%s' "$5" > "$DIR/sent.$SID.$$" && mv -f "$DIR/sent.$SID.$$" "$DIR/sent.$SID"
   OPEN=0
-  if [ "$1" = "working" ] && [ ! -f "$DIR/no-auto-open" ] && [ -n "$SESSION" ] \
+  if [ "$1" = "working" ] && [ ! -f "$DIR/off" ] && [ ! -f "$DIR/no-auto-open" ] && [ -n "$SESSION" ] \
      && [ "$(cat "$DIR/opened-for" 2>/dev/null)" != "$SESSION" ]; then
     case "$REPLY" in *'"attached":false'*)
       printf '%s' "$SESSION" > "$DIR/opened-for"
@@ -154,7 +155,19 @@ fi
 
 finish() { [ "$REASON" = "done" ] && printf '{}'; exit 0; }
 
-[ -f "$DIR/off" ] && finish
+# The settings controller is deliberately independent of the return listener.
+# It must survive Off so the browser can turn distractions back on. Only start
+# it for configured installs, and only on prompts (not every tool event).
+if [ -f "$DIR/settings.json" ] && command -v python3 >/dev/null 2>&1; then
+  python3 "$HERE/settings.py" is-enabled >/dev/null 2>&1 || :
+  if [ "$(field hook_event_name)" = "UserPromptSubmit" ]; then
+    : > "$DIR/settings-wake"
+    (exec nohup python3 "$HERE/settings.py" listen) </dev/null >/dev/null 2>&1 &
+  fi
+fi
+# The product's Off mode keeps status accurate while suppressing distractions.
+# A legacy off flag without settings still means the old full-sync disconnect.
+[ -f "$DIR/off" ] && [ ! -f "$DIR/settings.json" ] && finish
 case "$STATE" in working|waiting|idle|resume) ;; *) finish ;; esac
 
 if [ "$AGENT" = "codex" ] && [ "$STATE" = "waiting" ] && [ "$REASON" = "permission" ]; then
@@ -225,7 +238,7 @@ fi
 # report below and whatever the server says. Only on macOS, where the game is
 # one pop-up window that open.sh can find and bring forward; elsewhere it opens
 # once per session, after the report (see --send).
-if [ "$STATE" = "working" ] && [ "$(uname)" = "Darwin" ] && [ ! -f "$DIR/no-auto-open" ]; then
+if [ "$STATE" = "working" ] && [ "$(uname)" = "Darwin" ] && [ ! -f "$DIR/off" ] && [ ! -f "$DIR/no-auto-open" ]; then
   (
     exec sh "$HERE/open.sh" --resurface
   ) </dev/null >/dev/null 2>&1 &

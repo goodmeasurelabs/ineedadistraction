@@ -10,6 +10,7 @@ const name = (run: AgentRunSnapshot) => NAMES[run.agent ?? ''] ?? 'Your agent';
 const needsInput = (run: AgentRunSnapshot) => run.state === 'waiting' && (run.reason === 'question' || run.reason === 'permission');
 
 function description(run: AgentRunSnapshot): string {
+  if (run.statusUnconfirmed) return 'Earlier approval · Status unconfirmed';
   if (run.state === 'working') return 'Working';
   if (run.reason === 'permission') return 'Needs approval';
   if (run.reason === 'question') return 'Has a question';
@@ -22,17 +23,18 @@ function returnLabel(run: AgentRunSnapshot): string {
   return `Back to ${name(run)}`;
 }
 
-export default function AgentQueue({ agent }: { agent: AgentSync }) {
+export default function AgentQueue({ agent, onStopDistractions }: { agent: AgentSync; onStopDistractions?: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const { note, back, clear } = useReturnToAgent();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const notice = agent.notice;
   const noticeKey = notice ? `${notice.run}:${notice.revision}` : '';
-  const pending = agent.runs.filter((run) => needsInput(run) && !run.dismissed);
+  const pending = agent.runs.filter((run) => needsInput(run) && !run.dismissed && !run.statusUnconfirmed);
+  const earlier = agent.runs.filter((run) => needsInput(run) && !run.dismissed && run.statusUnconfirmed);
   const working = agent.runs.filter((run) => run.state === 'working');
   const recent = agent.runs.filter((run) => run.state === 'idle' && run.reason === 'done');
-  const rows = [...pending, ...working, ...recent];
+  const rows = [...pending, ...working, ...earlier, ...recent];
   const followed = agent.runs.find((run) => run.run === agent.foregroundRun);
 
   useEffect(() => {
@@ -80,7 +82,7 @@ export default function AgentQueue({ agent }: { agent: AgentSync }) {
     ? `${pending.length} ${pending.length === 1 ? 'agent needs' : 'agents need'} your input`
     : working.length
       ? `${working.length} ${working.length === 1 ? 'agent is' : 'agents are'} working`
-      : 'No agents need your input';
+      : earlier.length ? `${earlier.length} earlier ${earlier.length === 1 ? 'request' : 'requests'}` : 'No agents need your input';
 
   return (
     <section className="agent-queue" aria-label="Your agents">
@@ -101,12 +103,15 @@ export default function AgentQueue({ agent }: { agent: AgentSync }) {
                 <time dateTime={new Date(run.updatedAt).toISOString()}>{new Date(run.updatedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>
               </div>
               <div className="agent-queue-actions">
-                <button disabled={busy || run.returnTarget === 'unavailable'} onClick={() => void returnTo(run)}>{returnLabel(run)}</button>
+                {run.returnTarget === 'unavailable'
+                  ? <span className="agent-queue-manual">Open {name(run)} manually</span>
+                  : <button disabled={busy} onClick={() => void returnTo(run)}>{returnLabel(run)}</button>}
                 {needsInput(run) && <button disabled={busy} onClick={() => void action('dismiss', run)}>Clear</button>}
               </div>
             </article>
           ))}
           {pending.length > 0 && <p className="agent-queue-help">Clearing removes the request from Distraction. You can still answer it in your agent.</p>}
+          {earlier.length > 0 && <p className="agent-queue-help">These earlier approvals have not been confirmed as active. Check them in your agent, or clear them here.</p>}
         </div>
       </details>
       {followed?.state === 'working' && pending.length > 0 && <p className="agent-queue-following">Following {name(followed)} · {followed.run.slice(-6)}</p>}
@@ -119,8 +124,11 @@ export default function AgentQueue({ agent }: { agent: AgentSync }) {
           <p className="agent-notice-label">{needsInput(notice) ? 'YOUR INPUT IS NEEDED' : 'YOUR AGENT IS DONE'}</p>
           <h2 id="agent-notice-title">{name(notice)} {notice.reason === 'permission' ? 'needs approval.' : notice.reason === 'question' ? 'has a question.' : 'finished.'}</h2>
           <p>Chat {notice.run.slice(-6)}</p>
-          <button className="agent-notice-primary" autoFocus disabled={busy || notice.returnTarget === 'unavailable'} onClick={() => void returnTo(notice)}>{returnLabel(notice)}</button>
-          <button disabled={busy} onClick={() => void action('ack', notice)}>Keep playing</button>
+          {notice.returnTarget === 'unavailable'
+            ? <p>Open {name(notice)} manually to review this {needsInput(notice) ? 'request' : 'result'}.</p>
+            : <button className="agent-notice-primary" autoFocus disabled={busy} onClick={() => void returnTo(notice)}>{returnLabel(notice)}</button>}
+          <button disabled={busy} onClick={() => void action('ack', notice)}>Resume this game</button>
+          {onStopDistractions && <button onClick={onStopDistractions}>Stop distracting</button>}
           {needsInput(notice) && <button disabled={busy} onClick={() => void action('dismiss', notice)}>Clear this request</button>}
           {(error || note) && <p role="status">{error || note}</p>}
         </div>}

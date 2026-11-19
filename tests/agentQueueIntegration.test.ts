@@ -223,3 +223,30 @@ test('HTTP GET keeps an old request clearable while expiring stale work', async 
   const cleared = await post({ action: 'clear', items: [{ run: 'claude', revision: request.revision }] });
   assert.equal(cleared.body.waiting, 0);
 });
+
+test('HTTP legacy orphan approval does not resurface on a new prompt and can still be cleared', async () => {
+  const legacy = await post({ session: 'legacy', state: 'waiting', reason: 'permission', agent: 'codex' });
+  assert.equal(legacy.status, 200);
+  assert.equal(legacy.body.notice.run, 'legacy');
+  const old = runs.rows.find((run) => run.run === 'legacy')!;
+  // Match a row migrated from the original protocol: yesterday's approval,
+  // revision zero and no event, prompt or return-target metadata.
+  old.updatedAt = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  old.revision = 0;
+  const working = await report('codex', 'working', 'prompt');
+  assert.equal(working.waiting, 0);
+  assert.equal(working.notice, null);
+  assert.equal(working.runs.find((run: Row) => run.run === 'legacy').statusUnconfirmed, true);
+  const { GET } = await handlers;
+  const response = await GET(new Request(`https://example.test/api/agent/${token}?peek=1`), params);
+  const snapshot = await response.json();
+  assert.equal(snapshot.notice, null);
+  assert.equal(snapshot.state, 'working');
+  const cleared = await post({ action: 'clear', items: [{ run: 'legacy', revision: old.revision }] });
+  assert.equal(cleared.status, 200);
+  assert.equal(cleared.body.runs.find((run: Row) => run.run === 'legacy').dismissed, true);
+  const fresh = await report('legacy', 'waiting', 'permission');
+  assert.equal(fresh.waiting, 1);
+  assert.equal(fresh.notice.run, 'legacy');
+  assert.equal(fresh.notice.statusUnconfirmed, undefined);
+});

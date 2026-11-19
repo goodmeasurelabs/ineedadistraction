@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400" fill="none">
+<defs><linearGradient id="bg" x2="640" y2="400" gradientUnits="userSpaceOnUse"><stop stop-color="#1c285e"/><stop offset="1" stop-color="#411344"/></linearGradient><linearGradient id="gold" y2="1"><stop stop-color="#ffe9a0"/><stop offset="1" stop-color="#f2ad4d"/></linearGradient><linearGradient id="lav" y2="1"><stop stop-color="#d7b3ff"/><stop offset="1" stop-color="#9966e2"/></linearGradient><pattern id="grid" width="56" height="56" patternUnits="userSpaceOnUse"><rect x="3" y="3" width="49" height="49" rx="9" fill="#24274b" stroke="#79729d" stroke-opacity=".35"/></pattern><filter id="shadow"><feDropShadow dx="0" dy="10" stdDeviation="9" flood-color="#110c30" flood-opacity=".65"/></filter></defs>
+<path fill="url(#bg)" d="M0 0h640v400H0z"/><circle cx="475" cy="65" r="150" fill="#ae5c9f" opacity=".08"/>
+<g transform="translate(172 36) rotate(9 140 140)" filter="url(#shadow)"><rect width="280" height="336" rx="16" fill="url(#grid)"/>
+<g fill="url(#gold)"><rect x="3" y="227" width="49" height="49" rx="9"/><rect x="59" y="227" width="49" height="49" rx="9"/><rect x="115" y="227" width="49" height="49" rx="9"/><rect x="115" y="171" width="49" height="49" rx="9"/><rect x="227" y="283" width="49" height="49" rx="9"/><rect x="171" y="283" width="49" height="49" rx="9"/></g>
+<g fill="url(#lav)"><rect x="171" y="115" width="49" height="49" rx="9"/><rect x="227" y="115" width="49" height="49" rx="9"/><rect x="227" y="59" width="49" height="49" rx="9"/></g>
+<path d="M14 307h139" stroke="#fff5c0" stroke-width="3" stroke-linecap="round" stroke-dasharray="6 8" opacity=".65"/></g>
+<g transform="translate(64 98) rotate(-15)" fill="url(#gold)" filter="url(#shadow)"><rect width="42" height="42" rx="8"/><rect y="46" width="42" height="42" rx="8"/><rect x="46" y="46" width="42" height="42" rx="8"/></g>
+<g transform="translate(506 214) rotate(16)" fill="url(#lav)"><rect width="35" height="35" rx="7"/><rect y="40" width="35" height="35" rx="7"/><rect y="80" width="35" height="35" rx="7"/></g>
+<path d="m503 70 4 13 13 4-13 4-4 13-4-13-13-4 13-4z" fill="#ffdda7"/><circle cx="99" cy="296" r="6" fill="#ceadff"/><circle cx="555" cy="128" r="3" fill="#ffdda7"/>
+</svg>

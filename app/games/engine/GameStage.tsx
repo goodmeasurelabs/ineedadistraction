@@ -5,11 +5,23 @@ import Link from 'next/link';
 import type { Game, GameHost, GameModule, RunResult } from './types';
 import { Sfx } from './sfx';
 import { hashString } from './fx';
-import { readAgentToken, useAgentSync } from './useAgentSync';
+import { readAgentToken, useAgentSync, type AgentSync } from './useAgentSync';
+import { useDistractionSettings } from '../../lib/useDistractionSettings';
 import { trackEvent, trackShareClick } from '../../lib/analytics';
 import AgentQueue from '../../components/AgentQueue';
 
 type OtherGame = { slug: string; title: string; emoji: string };
+
+export type ArcadeControls = {
+  agent: AgentSync;
+  suspended: boolean;
+  notificationsEnabled: boolean;
+  sound: boolean;
+  onSoundChange: (sound: boolean) => void;
+  onBack: () => void;
+  onChooseGame: (slug: string) => void;
+  onStopDistractions?: () => void;
+};
 
 type Props = {
   slug: string;
@@ -18,9 +30,10 @@ type Props = {
   accent: string;
   module: GameModule;
   others: OtherGame[];
+  arcade?: ArcadeControls;
 };
 
-type PauseCause = null | 'manual' | 'blur' | 'agent';
+type PauseCause = null | 'manual' | 'blur' | 'agent' | 'external';
 type Mode = 'endless' | 'daily';
 
 type SeededRng = (() => number) & { state: () => number; restore: (s: number) => void };
@@ -45,7 +58,7 @@ const store = {
   del(key: string) { try { localStorage.removeItem(key); } catch { /* optional */ } },
 };
 
-export default function GameStage({ slug, title, hint, accent, module, others }: Props) {
+export default function GameStage({ slug, title, hint, accent, module, others, arcade }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<Game | null>(null);
@@ -67,7 +80,12 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
   const [shareNote, setShareNote] = useState('');
   const [showHint, setShowHint] = useState(true);
   const [runKey, setRunKey] = useState(0);
-  const agent = useAgentSync();
+  const ownAgent = useAgentSync(!arcade);
+  const browserSettings = useDistractionSettings(!arcade);
+  const agent = arcade?.agent ?? ownAgent;
+  const notificationsEnabled = arcade?.notificationsEnabled ?? (!browserSettings.loading && !browserSettings.error && browserSettings.settings?.enabled !== false);
+  const arcadeRef = useRef(arcade);
+  arcadeRef.current = arcade;
 
   // Daily runs chase their own number: today's best on today's seed.
   const bestKey = mode === 'daily' ? `inad:daily:${slug}:${today()}` : `inad:best:${slug}`;
@@ -274,7 +292,7 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
     canvas.addEventListener('pointerleave', onLeave);
 
     function onKey(event: KeyboardEvent) {
-      if (state.pause === 'agent') return;
+      if (state.pause === 'agent' || state.pause === 'external') return;
       const target = event.target as HTMLElement | null;
       if (target && /INPUT|TEXTAREA|SELECT/.test(target.tagName)) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -290,7 +308,7 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
           if (state.pause === null) setPause('manual'); else setPause(null, true);
           return;
         }
-        if (event.code === 'KeyM') { sfx.setMuted(!sfx.muted); setMuted(sfx.muted); return; }
+        if (event.code === 'KeyM') { sfx.setMuted(!sfx.muted); setMuted(sfx.muted); arcadeRef.current?.onSoundChange(!sfx.muted); return; }
       }
       if (blocked()) return;
       if (down) { sfx.unlock(); interacted(); }
@@ -331,6 +349,11 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
   // ---- Agent Mode -----------------------------------------------------------
   const lastNotice = useRef('');
   useEffect(() => {
+    if (!notificationsEnabled) {
+      if (live.current.pause === 'agent') setPause('manual');
+      lastNotice.current = '';
+      return;
+    }
     const noticeKey = agent.notice ? `${agent.notice.run}:${agent.notice.revision}` : '';
     if (noticeKey) {
       setPause('agent');
@@ -339,24 +362,41 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
       setPause(null, true);
     }
     lastNotice.current = noticeKey;
-  }, [agent.notice, setPause, runKey]);
+  }, [agent.notice, notificationsEnabled, setPause, runKey]);
+
+  const beforeExternalPause = useRef<PauseCause>(null);
+  useEffect(() => {
+    if (arcade?.suspended) {
+      if (live.current.pause !== 'external') beforeExternalPause.current = live.current.pause;
+      setPause('external');
+    } else if (live.current.pause === 'external') {
+      const previous = beforeExternalPause.current;
+      setPause(notificationsEnabled && agent.notice ? 'agent' : previous === 'manual' || previous === 'blur' ? previous : null, true);
+    }
+  }, [arcade?.suspended, notificationsEnabled, agent.notice, setPause, runKey, mode]);
+
+  useEffect(() => {
+    if (!arcade || !sfxRef.current) return;
+    sfxRef.current.setMuted(!arcade.sound);
+    setMuted(!arcade.sound);
+  }, [arcade?.sound, runKey, mode]);
 
   // Tab title carries the agent's status, so it is visible from another window.
-  const needsYou = agent.paired && !!agent.notice;
+  const needsYou = notificationsEnabled && agent.paired && !!agent.notice;
   useEffect(() => {
-    if (!agent.paired) return;
+    if (!agent.paired || !notificationsEnabled) return;
     const base = `${title} · I Need a Distraction`;
     if (!needsYou) { document.title = agent.state === 'working' ? `▶ ${base}` : base; return; }
     let on = false;
     document.title = '● Your agent needs you';
     const timer = setInterval(() => { on = !on; document.title = on ? `${title} (paused)` : '● Your agent needs you'; }, 1100);
     return () => { clearInterval(timer); document.title = base; };
-  }, [needsYou, agent.paired, agent.state, title]);
+  }, [needsYou, agent.paired, agent.state, title, notificationsEnabled]);
 
   // ---- Actions --------------------------------------------------------------
   function again() { if (live.current.over && performance.now() - live.current.overAt < 700) return; sfxRef.current?.unlock(); setRunKey((k) => k + 1); }
   function switchMode(next: Mode) { if (next !== mode) { setMode(next); setRunKey(0); } }
-  function toggleMute() { const sfx = sfxRef.current; if (!sfx) return; sfx.unlock(); sfx.setMuted(!sfx.muted); setMuted(sfx.muted); }
+  function toggleMute() { const sfx = sfxRef.current; if (!sfx) return; sfx.unlock(); sfx.setMuted(!sfx.muted); setMuted(sfx.muted); arcadeRef.current?.onSoundChange(!sfx.muted); }
   function restart() {
     if (!live.current.over && live.current.score > 0 && !confirm('Start over? This run will be lost.')) return;
     store.del(saveKey(mode)); live.current.overAt = 0; again();
@@ -377,7 +417,7 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
   return (
     <div className="stage" style={{ '--accent': accent } as React.CSSProperties}>
       <header className="stage-bar">
-        <Link href="/" className="stage-back" aria-label="Back to all games">←</Link>
+        {arcade ? <button className="stage-back" onClick={arcade.onBack} aria-label="Choose another game">←</button> : <Link href="/" className="stage-back" aria-label="Back to all games">←</Link>}
         <div className="stage-title">
           <strong>{title}</strong>
           <span className="stage-modes" role="group" aria-label="Game mode">
@@ -392,11 +432,11 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
         <div className="stage-tools">
           <button onClick={toggleMute} aria-label={muted ? 'Turn sound on' : 'Mute sound'} title="Sound (M)">{muted ? '🔇' : '🔊'}</button>
           <button onClick={restart} aria-label="Restart" title="Restart">↻</button>
-          <button onClick={() => (pause === null ? setPause('manual') : setPause(null, true))} aria-label={pause === null ? 'Pause' : 'Resume'} title="Pause (P)">{pause === null ? '❙❙' : '▶'}</button>
+          <button disabled={arcade?.suspended} onClick={() => (pause === null ? setPause('manual') : setPause(null, true))} aria-label={pause === null ? 'Pause' : 'Resume'} title="Pause (P)">{pause === null ? '❙❙' : '▶'}</button>
         </div>
       </header>
 
-      <AgentQueue agent={agent} />
+      {notificationsEnabled && <AgentQueue agent={agent} onStopDistractions={arcade?.onStopDistractions} />}
 
       <div className="stage-canvas" ref={wrapRef}>
         <canvas ref={canvasRef} aria-label={`${title} game`} />
@@ -425,7 +465,9 @@ export default function GameStage({ slug, title, hint, accent, module, others }:
             </div>
             {shareNote && <p className="result-note" role="status">{shareNote}</p>}
             <div className="result-others">
-              {others.map((other) => <Link key={other.slug} href={`/games/${other.slug}`}><span aria-hidden="true">{other.emoji}</span>{other.title}</Link>)}
+              {others.map((other) => arcade
+                ? <button key={other.slug} onClick={() => arcade.onChooseGame(other.slug)}><span aria-hidden="true">{other.emoji}</span>{other.title}</button>
+                : <Link key={other.slug} href={`/games/${other.slug}`}><span aria-hidden="true">{other.emoji}</span>{other.title}</Link>)}
             </div>
           </div>
         )}

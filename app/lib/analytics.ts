@@ -16,7 +16,11 @@ function gtag(...args: unknown[]): void {
 }
 
 export function trackEvent(eventName: string, params?: EventParams): void {
-  gtag('event', eventName, params);
+  // Pairing capabilities live in URL fragments. Analytics can initialize or
+  // fire before the player consumes that fragment, so never infer a full URL.
+  const pageLocation = typeof window === 'undefined' ? undefined
+    : window.location.origin + window.location.pathname + window.location.search;
+  gtag('event', eventName, { ...params, page_location: pageLocation });
 }
 
 // Tier 1 — Universal Events
