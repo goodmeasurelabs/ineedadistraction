@@ -22,5 +22,5 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
 
 export default async function AgentPage({ searchParams }: PageProps) {
   const { mode } = await searchParams;
-  return <AgentClient clipCount={mode === 'family-guy' ? FAMILY_GUY_CLIPS.length : undefined} />;
+  return <AgentClient clips={mode === 'family-guy'} clipCount={FAMILY_GUY_CLIPS.length} />;
 }

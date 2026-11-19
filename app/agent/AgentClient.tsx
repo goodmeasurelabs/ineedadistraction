@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import DistractionPreferencesPicker from '../components/DistractionPreferencesPicker';
+import FamilyGuyPromo from '../components/FamilyGuyPromo';
 import { readAgentToken } from '../games/engine/useAgentSync';
 import {
   DEFAULT_DISTRACTION_PREFERENCES, buildSetupPrompt, getEligibleGames,
@@ -13,8 +14,7 @@ import { trackEvent } from '../lib/analytics';
 
 const DRAFT_KEY = 'inad:setup-preferences:v1';
 
-export default function AgentClient({ clipCount }: { clipCount?: number }) {
-  const clips = clipCount !== undefined;
+export default function AgentClient({ clips, clipCount }: { clips: boolean; clipCount: number }) {
   const [preferences, setPreferences] = useState<DistractionPreferences>(DEFAULT_DISTRACTION_PREFERENCES);
   const [hasToken, setHasToken] = useState(false);
   const [ready, setReady] = useState(false);
@@ -89,7 +89,7 @@ export default function AgentClient({ clipCount }: { clipCount?: number }) {
             <h1 id="pair-title">Your agent works.<br /><em>You play.</em></h1>
             <p className="pair-lede">Good games for the in-between. Pick your favorites, pair your agent, and play until it needs you.</p>
             <div className="pair-promises"><span>Free to play</span><span>No account needed</span><span>Always an off switch</span></div>
-            <Link className="pair-clips-link" href="/agent?mode=family-guy">Set up Family Guy clips in your popup ↗</Link>
+            <FamilyGuyPromo clipCount={clipCount} location="agent_hero" />
           </div>
           <div className="pair-hero-art" aria-hidden="true">
             <div className="pair-art-orbit pair-art-orbit-one" />

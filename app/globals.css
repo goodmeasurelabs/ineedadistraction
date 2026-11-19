@@ -1190,12 +1190,6 @@ body {
 .bb-status { font-size: 13px; color: #d9f69b; min-height: 18px; margin: 6px 0 0; }
 .bb-done { margin: 28px 0 0; font-size: 18px; color: #e3f4b0; }
 .bb-features { display: grid; grid-template-columns: minmax(0, 1.24fr) minmax(0, 1fr); gap: 14px; width: 100%; max-width: 940px; margin-top: 40px; text-align: left; }
-.bb-clips-feature { display: flex; align-items: center; gap: 16px; padding: 14px; border-radius: 18px; border: 1px solid #7e80af88; background: linear-gradient(115deg, #38324d, #26283a 68%, #222832); text-decoration: none; }
-.bb-clips-feature:hover, .bb-clips-feature:focus-visible { border-color: #c1baff; }
-.bb-clips-feature img { width: 35%; max-width: 160px; height: auto; aspect-ratio: 16 / 9; border-radius: 9px; }
-.bb-clips-copy { display: grid; gap: 4px; color: #d1d0dc; font-size: 13px; line-height: 1.4; }
-.bb-clips-copy strong { color: #fcfaff; font-size: 20px; line-height: 1.1; letter-spacing: -.02em; }
-.bb-clips-copy b { margin-top: 4px; font-size: 13px; color: #d1c6ff; }
 .bb-daily { display: flex; align-items: center; gap: 18px; text-align: left; padding: 18px 22px; border: 1px solid #8b9c7650; border-radius: 18px; background: #1a221e; width: 100%; transition: border-color .15s; }
 .bb-daily:hover { border-color: #dcf998; }
 .bb-daily-emoji { font-size: 36px; }

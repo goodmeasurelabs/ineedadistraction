@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import GameStage from './GameStage';
+import FamilyGuyPromo from './FamilyGuyPromo';
 import { getBreakGame, makeConfig, randomSeed, variantTitle } from '../lib/breakGames';
 import { buildPool, LAST_PICK_KEY, pickNext } from '../lib/distract';
 import { trackEvent } from '../lib/analytics';
@@ -127,16 +128,7 @@ export default function BreakButton({ community, daily, clipCount }: { community
       {backToWork && <p className="bb-done" ref={doneRef} tabIndex={-1}>Back to it. The button will be here for your next break.</p>}
 
       <div className="bb-features">
-        <a className="bb-clips-feature" href="/agent?mode=family-guy" onClick={() => trackEvent('cta_click', { cta_text: 'Set up Family Guy clips', cta_location: 'home_hero' })}>
-          {/* Official still from “The Griffins Attend Streaming Con.” Playback lives in the popup. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/featured/family-guy.jpg" width="320" height="180" alt="" />
-          <span className="bb-clips-copy">
-            <strong>Family Guy clips</strong>
-            <span>{clipCount} clips for your popup while Codex or Claude Code works.</span>
-            <b>Set up clips <span aria-hidden="true">→</span></b>
-          </span>
-        </a>
+        <FamilyGuyPromo clipCount={clipCount} location="home_hero" />
         <a className="bb-daily" href="/daily" onClick={() => trackEvent('cta_click', { cta_text: 'Daily teaser', cta_location: 'home_hero' })}>
           <span className="bb-daily-emoji" aria-hidden="true">{daily.emoji}</span>
           <span><small>TODAY’S DAILY · #{daily.number}</small><strong>{daily.title}</strong><em>Same challenge for everyone today · {daily.roundLabel}</em></span>

@@ -112,6 +112,6 @@
 .pair-clips-hero .pair-setup h2 { margin-top: 0; }
 .pair-page .pair-clips-returning { margin-top: 22px; color: #b0c2af; max-width: 45ch; font-size: 14px; }
 .pair-clips-returning strong { color: #ebf3de; }
-.pair-page .pair-clips-link { display: inline-block; margin-top: 18px; color: #dcf998; font-size: 14px; text-underline-offset: 4px; }
+.pair-hero-copy .family-guy-promo { margin-top: 22px; max-width: 500px; }
 @media (max-width: 800px) { .pair-clips-hero { grid-template-columns: minmax(0, 1fr); gap: 26px; } }
 @media (max-width: 480px) { .pair-nav nav a:only-child { display: inline; } }
