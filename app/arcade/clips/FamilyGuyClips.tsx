@@ -5,7 +5,7 @@ import type { AgentRunSnapshot } from '../../lib/agentSession';
 import { FAMILY_GUY_CLIPS } from './catalog';
 import { trackClipTurn, type ClipTurn } from './clipTurn';
 import { markClipOffered, selectClip } from './rotation';
-import { mountClipPlayer, playWhileVisible } from './youtube';
+import { mountClipPlayer, playWhileVisible, type ClipAudio } from './youtube';
 import './clips.css';
 
 type Props = { foreground?: AgentRunSnapshot; suspended: boolean; sound: boolean; onBack(): void };
@@ -23,7 +23,7 @@ export default function FamilyGuyClips({ foreground, suspended, sound, onBack }:
   const bookmark = useRef({ selection, seconds: 0, offered: false });
   const host = useRef<HTMLDivElement>(null);
   const session = useRef<ReturnType<typeof mountClipPlayer> | null>(null);
-  const initialSound = useRef(sound);
+  const audio = useRef<ClipAudio>({ sound });
   const showPlayer = !suspended && !error;
 
   const nextClip = useCallback(() => {
@@ -46,7 +46,7 @@ export default function FamilyGuyClips({ foreground, suspended, sound, onBack }:
     turn.current = update.turn;
     if (update.rotate && bookmark.current.offered) nextClip();
   }, [foreground, nextClip]);
-  useLayoutEffect(() => { initialSound.current = sound; session.current?.setSound(sound); }, [sound]);
+  useLayoutEffect(() => { audio.current.sound = sound; session.current?.setSound(sound); }, [sound]);
   useLayoutEffect(() => {
     const current = bookmark.current;
     if (!showPlayer || !host.current || current.selection !== selection) return;
@@ -60,7 +60,7 @@ export default function FamilyGuyClips({ foreground, suspended, sound, onBack }:
       setNotice('Loading clip…');
       const player = mountClipPlayer(element, clip, {
         start: current.seconds,
-        sound: initialSound.current,
+        audio: audio.current,
       }, {
         onPlaying: () => { consecutiveUnavailable.current = 0; setNotice(''); },
         onPressPlay: () => setNotice('Press Play in the video to start.'),

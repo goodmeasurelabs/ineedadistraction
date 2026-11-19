@@ -5,6 +5,9 @@ type VideoPlayer = {
   pauseVideo(): void;
   mute(): void;
   unMute(): void;
+  isMuted(): boolean;
+  getVolume(): number;
+  setVolume(volume: number): void;
   getCurrentTime(): number;
   destroy(): void;
 };
@@ -20,6 +23,9 @@ export type YouTubeApi = {
 };
 type YouTubeWindow = Window & { YT?: YouTubeApi; onYouTubeIframeAPIReady?: () => void };
 let apiPromise: Promise<YouTubeApi> | undefined;
+
+/** Shared by the clip players in one popup. Native volume changes stay local to clips. */
+export type ClipAudio = { sound: boolean; volume?: number };
 
 function loadYouTubeApi(): Promise<YouTubeApi> {
   const browser = window as YouTubeWindow;
@@ -104,7 +110,7 @@ export function playWhileVisible(element: HTMLElement, start: () => () => void):
 export function mountClipPlayer(
   host: HTMLDivElement,
   clip: Clip,
-  options: { start: number; sound: boolean },
+  options: { start: number; audio: ClipAudio },
   events: ClipPlayerEvents,
   loadApi = loadYouTubeApi,
 ) {
@@ -112,14 +118,27 @@ export function mountClipPlayer(
   let player: VideoPlayer | undefined;
   let frame: HTMLIFrameElement | undefined;
   let position = options.start;
-  let sound = options.sound;
+  const audio = options.audio;
+  let played = false;
   let startedMuted = true;
+  let autoplayMuted = false;
   let watchdog: ReturnType<typeof setTimeout> | undefined;
   const stop = () => {
     if (active) {
       active = false;
       clearTimeout(watchdog);
       // Each bridge method can fail independently if the iframe never loaded.
+      // Sample before destroying the player, including when YouTube ends the clip.
+      // Native YouTube controls do not emit a public volume-change event.
+      if (played && player) {
+        try {
+          const muted = player.isMuted();
+          // A browser-enforced mute is temporary. A native unmute is a choice.
+          if (typeof muted === 'boolean' && (!autoplayMuted || !muted)) audio.sound = !muted;
+          const volume = player.getVolume();
+          if (Number.isInteger(volume) && volume >= 0 && volume <= 100) audio.volume = volume;
+        } catch { /* keep the last known audio settings */ }
+      }
       try { const t = player?.getCurrentTime(); if (t && Number.isFinite(t)) position = t; } catch { /* not ready */ }
       try { player?.pauseVideo(); } catch { /* not ready */ }
       try { player?.destroy(); } catch { /* remove the iframe ourselves below */ }
@@ -133,7 +152,6 @@ export function mountClipPlayer(
     events.onFailure(message);
   };
   const canPlay = () => active && host.isConnected && !document.hidden;
-  const applySound = (target: VideoPlayer) => { if (sound) target.unMute(); else target.mute(); };
 
   void loadApi().then((api) => {
     if (!canPlay()) return;
@@ -153,8 +171,11 @@ export function mountClipPlayer(
         if (!canPlay()) return;
         clearTimeout(watchdog);
         try {
-          // A popup opened by an agent may have no gesture to authorize audio.
-          startedMuted = !sound || !window.navigator?.userActivation?.hasBeenActive;
+          // Start a cold popup quietly. When replacing a playing clip, try its
+          // actual audio settings; the browser can still request a muted retry.
+          startedMuted = !audio.sound || (audio.volume === undefined && !window.navigator?.userActivation?.hasBeenActive);
+          autoplayMuted = startedMuted && audio.sound;
+          if (audio.volume !== undefined) target.setVolume(audio.volume);
           if (startedMuted) target.mute();
           else target.unMute();
           target.playVideo();
@@ -162,13 +183,17 @@ export function mountClipPlayer(
       },
       onStateChange({ data }) {
         if (!canPlay()) return;
-        if (data === 1) events.onPlaying();
+        if (data === 1) {
+          played = true;
+          events.onPlaying();
+        }
         if (data === 0) { stop(); events.onEnded(); }
       },
       onAutoplayBlocked({ target }) {
         if (!canPlay()) return;
         if (!startedMuted) {
           startedMuted = true;
+          autoplayMuted = true;
           try {
             target.mute();
             target.playVideo();
@@ -185,8 +210,17 @@ export function mountClipPlayer(
     } });
   }).catch(() => fail('YouTube could not load. Check your connection and try again.'));
 
-  return { stop, setSound(next: boolean) {
-    sound = next;
-    if (active && player) { try { applySound(player); } catch { /* onReady will apply it */ } }
-  } };
+  return {
+    stop,
+    setSound(next: boolean) {
+      if (!active) return;
+      audio.sound = next;
+      startedMuted = !next;
+      autoplayMuted = false;
+      try {
+        if (next) player?.unMute();
+        else player?.mute();
+      } catch { /* onReady will apply it */ }
+    },
+  };
 }
