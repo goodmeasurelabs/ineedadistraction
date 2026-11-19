@@ -18,6 +18,30 @@ function offer(rotation: ReturnType<typeof createClipRotation>, excluded?: Set<s
   return clip.id;
 }
 
+test('the popup library contains hundreds of distinct, labeled publisher uploads', () => {
+  assert.ok(FAMILY_GUY_CLIPS.length >= 200);
+  const publishers = new Set(['Family Guy', 'FOX', 'FOX TV UK', 'Hulu', 'TBS']);
+  const ids = new Set<string>();
+  for (const clip of FAMILY_GUY_CLIPS) {
+    assert.match(clip.id, /^[A-Za-z0-9_-]{11}$/);
+    assert.ok(clip.title.trim());
+    assert.ok(publishers.has(clip.channel), clip.channel);
+    assert.ok(!ids.has(clip.id), clip.id);
+    ids.add(clip.id);
+  }
+});
+
+test('a viewer of the three pilot clips receives the new library before another pilot clip', () => {
+  const pilot = ['JCNMNcUp9Os', '1K4tfKqJ1eM', 'BjX1ITzuJ_k'];
+  const saved = savedHistory();
+  saved.value = JSON.stringify(pilot);
+  const rotation = createClipRotation(FAMILY_GUY_CLIPS, () => saved);
+  const additions = FAMILY_GUY_CLIPS.filter((clip) => !pilot.includes(clip.id));
+  const offered = additions.map(() => offer(rotation));
+  assert.deepEqual(new Set(offered), new Set(additions.map((clip) => clip.id)));
+  assert.equal(offer(rotation), pilot[0]);
+});
+
 test('distinct popup launches exhaust the catalog before repeating, across cycle boundaries', () => {
   const saved = savedHistory();
   const picks = Array.from({ length: FAMILY_GUY_CLIPS.length * 4 }, () => {
@@ -34,7 +58,7 @@ test('unseen picks are randomized and merely selecting or offering an unknown ID
   const rotation = createClipRotation(FAMILY_GUY_CLIPS, () => saved);
   const random = t.mock.method(Math, 'random', () => 0);
   assert.equal(rotation.selectClip()?.id, FAMILY_GUY_CLIPS[0].id);
-  random.mock.mockImplementation(() => 0.999);
+  random.mock.mockImplementation(() => 1 - Number.EPSILON);
   assert.equal(rotation.selectClip()?.id, FAMILY_GUY_CLIPS.at(-1)?.id);
   rotation.markClipOffered('removed-id');
   assert.equal(saved.value, null);
@@ -42,8 +66,9 @@ test('unseen picks are randomized and merely selecting or offering an unknown ID
 
 test('a missing embed is skipped locally and returns to rotation when eligible again', () => {
   const saved = savedHistory();
-  const rotation = createClipRotation(FAMILY_GUY_CLIPS, () => saved);
-  const blocked = FAMILY_GUY_CLIPS[0].id;
+  const catalog = FAMILY_GUY_CLIPS.slice(0, 3);
+  const rotation = createClipRotation(catalog, () => saved);
+  const blocked = catalog[0].id;
   const excluded = new Set([blocked]);
   const picks = Array.from({ length: 4 }, () => offer(rotation, excluded));
   assert.ok(!picks.includes(blocked));
@@ -52,7 +77,7 @@ test('a missing embed is skipped locally and returns to rotation when eligible a
   excluded.add(picks[0]);
   assert.equal(offer(rotation, excluded), picks[1]);
   assert.equal(offer(rotation, excluded), picks[1]);
-  assert.equal(rotation.selectClip(new Set(FAMILY_GUY_CLIPS.map((clip) => clip.id))), null);
+  assert.equal(rotation.selectClip(new Set(catalog.map((clip) => clip.id))), null);
   assert.equal(rotation.selectClip()?.id, blocked);
 });
 
@@ -107,11 +132,12 @@ test('failed writes keep newer offers in memory until the storage quota recovers
 
 test('open windows see offers saved by another window and refresh a replay’s recency', () => {
   const saved = savedHistory();
-  const first = createClipRotation(FAMILY_GUY_CLIPS, () => saved);
-  const second = createClipRotation(FAMILY_GUY_CLIPS, () => saved);
+  const catalog = FAMILY_GUY_CLIPS.slice(0, 3);
+  const first = createClipRotation(catalog, () => saved);
+  const second = createClipRotation(catalog, () => saved);
   const picks = [offer(first), offer(second), offer(first)];
-  assert.equal(new Set(picks).size, FAMILY_GUY_CLIPS.length);
-  const onlyFirst = new Set(FAMILY_GUY_CLIPS.filter((clip) => clip.id !== picks[0]).map((clip) => clip.id));
+  assert.equal(new Set(picks).size, catalog.length);
+  const onlyFirst = new Set(catalog.filter((clip) => clip.id !== picks[0]).map((clip) => clip.id));
   assert.equal(offer(second, onlyFirst), picks[0]);
   assert.equal(offer(first), picks[1]);
 });

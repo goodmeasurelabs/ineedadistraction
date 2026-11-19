@@ -34,7 +34,8 @@ export function createClipRotation(
 
   function selectClip(excluded?: ReadonlySet<string>): Clip | null {
     const offered = readHistory();
-    const unseen = catalog.filter((clip) => !excluded?.has(clip.id) && !offered.includes(clip.id));
+    const seen = new Set(offered);
+    const unseen = catalog.filter((clip) => !excluded?.has(clip.id) && !seen.has(clip.id));
     if (unseen.length) return unseen[Math.floor(Math.random() * unseen.length)];
     for (const id of offered) {
       if (!excluded?.has(id)) return clipsById.get(id)!;

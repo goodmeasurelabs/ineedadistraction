@@ -9,6 +9,7 @@ import { mountClipPlayer, playWhileVisible } from './youtube';
 import './clips.css';
 
 type Props = { foreground?: AgentRunSnapshot; suspended: boolean; sound: boolean; onBack(): void };
+const MAX_CONSECUTIVE_UNAVAILABLE = 3;
 
 export default function FamilyGuyClips({ foreground, suspended, sound, onBack }: Props) {
   // A fresh selection object also restarts playback if only one clip can be embedded.
@@ -17,6 +18,7 @@ export default function FamilyGuyClips({ foreground, suspended, sound, onBack }:
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const unavailable = useRef(new Set<string>());
+  const consecutiveUnavailable = useRef(0);
   const turn = useRef<ClipTurn | undefined>(undefined);
   const bookmark = useRef({ selection, seconds: 0, offered: false });
   const host = useRef<HTMLDivElement>(null);
@@ -60,10 +62,18 @@ export default function FamilyGuyClips({ foreground, suspended, sound, onBack }:
         start: current.seconds,
         sound: initialSound.current,
       }, {
-        onPlaying: () => setNotice(''),
+        onPlaying: () => { consecutiveUnavailable.current = 0; setNotice(''); },
         onPressPlay: () => setNotice('Press Play in the video to start.'),
         onEnded: nextClip,
-        onUnavailable: () => { unavailable.current.add(clip.id); nextClip(); },
+        onUnavailable: () => {
+          unavailable.current.add(clip.id);
+          consecutiveUnavailable.current++;
+          if (consecutiveUnavailable.current >= MAX_CONSECUTIVE_UNAVAILABLE && unavailable.current.size < FAMILY_GUY_CLIPS.length) {
+            setError(`YouTube couldn’t play the last ${MAX_CONSECUTIVE_UNAVAILABLE} clips here.`);
+            return;
+          }
+          nextClip();
+        },
         onFailure: setError,
       });
       session.current = player;
@@ -75,12 +85,15 @@ export default function FamilyGuyClips({ foreground, suspended, sound, onBack }:
   }, [showPlayer, clip, selection, nextClip]);
 
   function retry() {
-    if (unavailable.current.size === FAMILY_GUY_CLIPS.length) {
-      unavailable.current.clear();
-      nextClip();
-      return;
-    }
-    setError('');
+    consecutiveUnavailable.current = 0;
+    if (!unavailable.current.has(clip.id)) { setError(''); return; }
+    if (unavailable.current.size === FAMILY_GUY_CLIPS.length) unavailable.current.clear();
+    nextClip();
+  }
+
+  function skip() {
+    consecutiveUnavailable.current = 0;
+    nextClip();
   }
 
   return (
@@ -96,7 +109,7 @@ export default function FamilyGuyClips({ foreground, suspended, sound, onBack }:
       <div className="family-clips-caption">
         <button type="button" className="family-clips-back" onClick={onBack}>← Games</button>
         <div><h1>{clip.title}</h1><p>{FAMILY_GUY_CLIPS.length} clips · {clip.channel} on YouTube</p></div>
-        <button type="button" disabled={suspended || unavailable.current.size === FAMILY_GUY_CLIPS.length} onClick={nextClip}>Next clip →</button>
+        <button type="button" disabled={suspended || unavailable.current.size === FAMILY_GUY_CLIPS.length} onClick={skip}>Next clip →</button>
       </div>
       <p className="family-clips-status" role="status">{showPlayer && notice}</p>
     </section>
