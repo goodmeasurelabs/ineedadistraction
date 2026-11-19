@@ -1,69 +1,85 @@
 'use client';
 
-import { useLayoutEffect, useRef, useState } from 'react';
-import { FAMILY_GUY_CLIPS, shuffledClips } from './catalog';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import type { AgentRunSnapshot } from '../../lib/agentSession';
+import { FAMILY_GUY_CLIPS } from './catalog';
+import { trackClipTurn, type ClipTurn } from './clipTurn';
+import { markClipOffered, selectClip } from './rotation';
 import { mountClipPlayer, playWhileVisible } from './youtube';
 import './clips.css';
 
-type Props = { suspended: boolean; sound: boolean; onBack(): void };
+type Props = { foreground?: AgentRunSnapshot; suspended: boolean; sound: boolean; onBack(): void };
 
-export default function FamilyGuyClips({ suspended, sound, onBack }: Props) {
-  const [deck, setDeck] = useState(() => shuffledClips());
+export default function FamilyGuyClips({ foreground, suspended, sound, onBack }: Props) {
+  // A fresh selection object also restarts playback if only one clip can be embedded.
+  const [selection, setSelection] = useState(() => ({ clip: selectClip() ?? FAMILY_GUY_CLIPS[0] }));
+  const { clip } = selection;
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
-  const clip = deck[0];
   const unavailable = useRef(new Set<string>());
-  const position = useRef({ id: clip.id, seconds: 0 });
+  const turn = useRef<ClipTurn | undefined>(undefined);
+  const bookmark = useRef({ selection, seconds: 0, offered: false });
   const host = useRef<HTMLDivElement>(null);
   const session = useRef<ReturnType<typeof mountClipPlayer> | null>(null);
   const initialSound = useRef(sound);
   const showPlayer = !suspended && !error;
 
-  function nextClip() {
-    const remaining = deck.slice(1).filter((entry) => !unavailable.current.has(entry.id));
-    const next = remaining.length ? remaining : shuffledClips(clip.id, unavailable.current);
-    if (!next.length) {
-      setError('These three clips are unavailable here.');
+  const nextClip = useCallback(() => {
+    const otherClips = new Set(unavailable.current).add(clip.id);
+    const next = selectClip(otherClips) ?? selectClip(unavailable.current);
+    if (!next) {
+      setError(`All ${FAMILY_GUY_CLIPS.length} clips are unavailable here.`);
       return;
     }
-    // Reset even if only one playable clip remains in the collection.
     session.current?.stop();
-    position.current = { id: next[0].id, seconds: 0 };
-    setDeck(next);
+    const nextSelection = { clip: next };
+    bookmark.current = { selection: nextSelection, seconds: 0, offered: false };
+    setSelection(nextSelection);
     setNotice('');
     setError('');
-  }
+  }, [clip.id]);
 
-  const advance = useRef(nextClip);
-  useLayoutEffect(() => { advance.current = nextClip; });
+  useLayoutEffect(() => {
+    const update = trackClipTurn(turn.current, foreground);
+    turn.current = update.turn;
+    if (update.rotate && bookmark.current.offered) nextClip();
+  }, [foreground, nextClip]);
   useLayoutEffect(() => { initialSound.current = sound; session.current?.setSound(sound); }, [sound]);
   useLayoutEffect(() => {
-    if (!showPlayer || !host.current) return;
+    const current = bookmark.current;
+    if (!showPlayer || !host.current || current.selection !== selection) return;
     const element = host.current;
-    const bookmark = position.current;
     return playWhileVisible(element, () => {
+      // Count a clip when it is offered in a visible popup, even if the user skips during loading.
+      if (!current.offered) {
+        markClipOffered(clip.id);
+        current.offered = true;
+      }
       setNotice('Loading clip…');
       const player = mountClipPlayer(element, clip, {
-        start: bookmark.id === clip.id ? bookmark.seconds : 0,
+        start: current.seconds,
         sound: initialSound.current,
       }, {
         onPlaying: () => setNotice(''),
         onPressPlay: () => setNotice('Press Play in the video to start.'),
-        onEnded: () => advance.current(),
-        onUnavailable: () => { unavailable.current.add(clip.id); advance.current(); },
+        onEnded: nextClip,
+        onUnavailable: () => { unavailable.current.add(clip.id); nextClip(); },
         onFailure: setError,
       });
       session.current = player;
       return () => {
-        bookmark.seconds = player.stop();
+        current.seconds = player.stop();
         session.current = null;
       };
     });
-    // The deck changes on every Next, including a replay of the only available clip.
-  }, [showPlayer, clip, deck]);
+  }, [showPlayer, clip, selection, nextClip]);
 
   function retry() {
-    if (unavailable.current.size === FAMILY_GUY_CLIPS.length) unavailable.current.clear();
+    if (unavailable.current.size === FAMILY_GUY_CLIPS.length) {
+      unavailable.current.clear();
+      nextClip();
+      return;
+    }
     setError('');
   }
 
@@ -79,7 +95,7 @@ export default function FamilyGuyClips({ suspended, sound, onBack }: Props) {
       </div>
       <div className="family-clips-caption">
         <button type="button" className="family-clips-back" onClick={onBack}>← Games</button>
-        <div><h1>{clip.title}</h1><p>{clip.channel} on YouTube</p></div>
+        <div><h1>{clip.title}</h1><p>{FAMILY_GUY_CLIPS.length} clips · {clip.channel} on YouTube</p></div>
         <button type="button" disabled={suspended || unavailable.current.size === FAMILY_GUY_CLIPS.length} onClick={nextClip}>Next clip →</button>
       </div>
       <p className="family-clips-status" role="status">{showPlayer && notice}</p>

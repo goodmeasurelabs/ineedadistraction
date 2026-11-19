@@ -1,6 +1,6 @@
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { FAMILY_GUY_CLIPS, shuffledClips } from '../app/arcade/clips/catalog';
+import { FAMILY_GUY_CLIPS } from '../app/arcade/clips/catalog';
 import { mountClipPlayer, playWhileVisible, type YouTubeApi } from '../app/arcade/clips/youtube';
 
 type Hooks = ConstructorParameters<YouTubeApi['Player']>[1]['events'];
@@ -198,21 +198,3 @@ for (const [code, action] of [[150, 'skip'], [153, 'error']] as const) {
     assert.deepEqual(f.added, ['create', 'pause', 'destroy', action]);
   });
 }
-
-test('each shuffle includes the three official clips and avoids an immediate repeat across collections', () => {
-  for (const clip of FAMILY_GUY_CLIPS) {
-    const batch = shuffledClips(clip.id);
-    assert.notEqual(batch[0].id, clip.id);
-    assert.deepEqual(new Set(batch.map((c) => c.id)), new Set(FAMILY_GUY_CLIPS.map((c) => c.id)));
-  }
-});
-
-test('a blocked clip stays excluded while the two remaining clips alternate across shuffles', () => {
-  const [previous, other, blocked] = FAMILY_GUY_CLIPS;
-  const unavailable = new Set([blocked.id]);
-  assert.deepEqual(shuffledClips(previous.id, unavailable), [other, previous]);
-  unavailable.add(other.id);
-  assert.deepEqual(shuffledClips(previous.id, unavailable), [previous]);
-  unavailable.add(previous.id);
-  assert.deepEqual(shuffledClips(previous.id, unavailable), []);
-});

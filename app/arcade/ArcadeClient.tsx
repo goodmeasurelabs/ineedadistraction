@@ -190,7 +190,12 @@ function Player({ pairingError, isPluginPopup }: { pairingError: string; isPlugi
               ? 'Waiting for your first turn. Send a prompt to Codex or Claude Code.'
               : 'Clip paused while your agent reconnects.'}
           </p>}
-          <FamilyGuyClips suspended={!notificationsEnabled || control.saving || !clipConnectionReady || !!agent.notice} sound={preferences.sound} onBack={() => chooseClips(false)} />
+          <FamilyGuyClips
+            foreground={agent.runs.find((run) => run.run === agent.foregroundRun)}
+            suspended={!notificationsEnabled || control.saving || !clipConnectionReady || !!agent.notice}
+            sound={preferences.sound}
+            onBack={() => chooseClips(false)}
+          />
         </div> : selected && getGame(selected) ? <GameClient key={selected} slug={selected} allowedSlugs={eligible.map((game) => game.slug)} arcade={{
           agent, suspended: off || customizing || control.loading || applying || settingsUnavailable,
           notificationsEnabled: notificationsEnabled && !customizing,
