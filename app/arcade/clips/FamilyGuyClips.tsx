@@ -8,10 +8,17 @@ import { markClipOffered, selectClip } from './rotation';
 import { mountClipPlayer, playWhileVisible, type ClipAudio } from './youtube';
 import './clips.css';
 
-type Props = { foreground?: AgentRunSnapshot; suspended: boolean; sound: boolean; onBack(): void };
+type Props = {
+  foreground?: AgentRunSnapshot;
+  suspended: boolean;
+  sound: boolean;
+  startWithSound: boolean;
+  onPlay?: () => void;
+  onBack(): void;
+};
 const MAX_CONSECUTIVE_UNAVAILABLE = 3;
 
-export default function FamilyGuyClips({ foreground, suspended, sound, onBack }: Props) {
+export default function FamilyGuyClips({ foreground, suspended, sound, startWithSound, onPlay, onBack }: Props) {
   // A fresh selection object also restarts playback if only one clip can be embedded.
   const [selection, setSelection] = useState(() => ({ clip: selectClip() ?? FAMILY_GUY_CLIPS[0] }));
   const { clip } = selection;
@@ -23,7 +30,7 @@ export default function FamilyGuyClips({ foreground, suspended, sound, onBack }:
   const bookmark = useRef({ selection, seconds: 0, offered: false });
   const host = useRef<HTMLDivElement>(null);
   const session = useRef<ReturnType<typeof mountClipPlayer> | null>(null);
-  const audio = useRef<ClipAudio>({ sound });
+  const audio = useRef<ClipAudio>({ sound: startWithSound && navigator.userActivation?.isActive === true });
   const showPlayer = !suspended && !error;
 
   const nextClip = useCallback(() => {
@@ -44,14 +51,26 @@ export default function FamilyGuyClips({ foreground, suspended, sound, onBack }:
   useLayoutEffect(() => {
     const update = trackClipTurn(turn.current, foreground);
     turn.current = update.turn;
-    if (update.rotate && bookmark.current.offered) nextClip();
+    if (update.rotate && bookmark.current.offered) {
+      nextClip();
+      audio.current.sound = false;
+    }
   }, [foreground, nextClip]);
-  useLayoutEffect(() => { audio.current.sound = sound; session.current?.setSound(sound); }, [sound]);
+  useLayoutEffect(() => {
+    if (!sound) {
+      audio.current.sound = false;
+      session.current?.setSound(false);
+    }
+  }, [sound]);
   useLayoutEffect(() => {
     const current = bookmark.current;
-    if (!showPlayer || !host.current || current.selection !== selection) return;
+    if (!showPlayer) {
+      audio.current.sound = false;
+      return;
+    }
+    if (!host.current || current.selection !== selection) return;
     const element = host.current;
-    return playWhileVisible(element, () => {
+    return playWhileVisible(element, (onFocusLost) => {
       // Count a clip when it is offered in a visible popup, even if the user skips during loading.
       if (!current.offered) {
         markClipOffered(clip.id);
@@ -61,6 +80,7 @@ export default function FamilyGuyClips({ foreground, suspended, sound, onBack }:
       const player = mountClipPlayer(element, clip, {
         start: current.seconds,
         audio: audio.current,
+        onFocusLost,
       }, {
         onPlaying: () => { consecutiveUnavailable.current = 0; setNotice(''); },
         onPressPlay: () => setNotice('Press Play in the video to start.'),
@@ -81,7 +101,7 @@ export default function FamilyGuyClips({ foreground, suspended, sound, onBack }:
         current.seconds = player.stop();
         session.current = null;
       };
-    });
+    }, () => { audio.current.sound = false; });
   }, [showPlayer, clip, selection, nextClip]);
 
   function retry() {
@@ -103,6 +123,10 @@ export default function FamilyGuyClips({ foreground, suspended, sound, onBack }:
           <div key="paused" className="family-clips-rest">
             <strong>{error || 'Clip paused'}</strong>
             {error && !suspended && <button type="button" onClick={retry}>Try again</button>}
+            {onPlay && <button type="button" onClick={() => {
+              audio.current.sound = sound;
+              onPlay();
+            }}>Play clip</button>}
           </div>
         )}
       </div>

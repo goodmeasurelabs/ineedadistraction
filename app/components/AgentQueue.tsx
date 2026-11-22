@@ -23,7 +23,7 @@ function returnLabel(run: AgentRunSnapshot): string {
   return `Back to ${name(run)}`;
 }
 
-export default function AgentQueue({ agent, onStopDistractions, clipMode = false }: { agent: AgentSync; onStopDistractions?: () => void; clipMode?: boolean }) {
+export default function AgentQueue({ agent, onStopDistractions, onResumeClips }: { agent: AgentSync; onStopDistractions?: () => void; onResumeClips?: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const { note, back, clear } = useReturnToAgent();
   const [error, setError] = useState('');
@@ -47,7 +47,7 @@ export default function AgentQueue({ agent, onStopDistractions, clipMode = false
     }
   }, [noticeKey, clear]);
 
-  async function action(kind: 'ack' | 'dismiss' | 'clear', run?: AgentRunSnapshot) {
+  async function action(kind: 'ack' | 'dismiss' | 'clear', run?: AgentRunSnapshot, onSuccess?: () => void) {
     clear();
     setBusy(true);
     setError('');
@@ -60,6 +60,7 @@ export default function AgentQueue({ agent, onStopDistractions, clipMode = false
       } else {
         await updateAgentQueue(kind, run);
       }
+      onSuccess?.();
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Could not update the queue.');
     } finally { setBusy(false); }
@@ -72,7 +73,7 @@ export default function AgentQueue({ agent, onStopDistractions, clipMode = false
     try {
       // Keep clips paused while the user switches to their agent to answer.
       // Its next working report clears the notice and resumes playback.
-      if (await back(run) && !clipMode) await updateAgentQueue('ack', run);
+      if (await back(run) && !onResumeClips) await updateAgentQueue('ack', run);
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Could not update the queue.');
     } finally { setBusy(false); }
@@ -81,7 +82,7 @@ export default function AgentQueue({ agent, onStopDistractions, clipMode = false
   if (!agent.paired) return null;
 
   const workingNames = [...new Set(working.map(name))];
-  const workingStatus = clipMode
+  const workingStatus = onResumeClips
     ? `${workingNames.join(' and ')} ${workingNames.length === 1 ? 'is' : 'are'} working`
     : `${working.length} ${working.length === 1 ? 'agent is' : 'agents are'} working`;
   const status = pending.length
@@ -133,7 +134,7 @@ export default function AgentQueue({ agent, onStopDistractions, clipMode = false
           {notice.returnTarget === 'unavailable'
             ? <p>Open {name(notice)} manually to review this {needsInput(notice) ? 'request' : 'result'}.</p>
             : <button className="agent-notice-primary" autoFocus disabled={busy} onClick={() => void returnTo(notice)}>{returnLabel(notice)}</button>}
-          <button disabled={busy} onClick={() => void action('ack', notice)}>{clipMode ? 'Back to clips' : 'Resume this game'}</button>
+          <button disabled={busy} onClick={() => void action('ack', notice, onResumeClips)}>{onResumeClips ? 'Back to clips' : 'Resume this game'}</button>
           {onStopDistractions && <button onClick={onStopDistractions}>Stop distracting</button>}
           {needsInput(notice) && <button disabled={busy} onClick={() => void action('dismiss', notice)}>Clear this request</button>}
           {(error || note) && <p role="status">{error || note}</p>}

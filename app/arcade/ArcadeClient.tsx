@@ -14,6 +14,7 @@ import { trackEvent } from '../lib/analytics';
 import { INITIAL_DISTRACTION_HOLD, distractionHoldReducer } from '../lib/distractionHold';
 import { initializeArcadePairing, prefersPopupClips, rememberPopupClips } from './popupSession';
 import { initializePopupWindow } from './clipWindow';
+import { clipPlaybackForQueue } from './clips/clipTurn';
 
 const DRAFT_KEY = 'inad:setup-preferences:v1';
 const FamilyGuyClips = dynamic(() => import('./clips/FamilyGuyClips'), {
@@ -56,9 +57,10 @@ function Player({ pairingError, isPluginPopup }: { pairingError: string; isPlugi
   const control = useDistractionSettings(!pairingError);
   const [guest, setGuest] = useState(DEFAULT_DISTRACTION_PREFERENCES);
   const [selected, setSelected] = useState<string | null>(null);
-  const [watchingClips, setWatchingClips] = useState(() =>
-    isPluginPopup && !new URLSearchParams(window.location.search).has('game') && prefersPopupClips()
+  const [watchingClips, setWatchingClips] = useState<'restored' | 'selected' | null>(() =>
+    isPluginPopup && !new URLSearchParams(window.location.search).has('game') && prefersPopupClips() ? 'restored' : null
   );
+  const [manualClipScope, setManualClipScope] = useState<string | null>(null);
   const [hold, dispatchHold] = useReducer(distractionHoldReducer, INITIAL_DISTRACTION_HOLD);
   const [customizing, setCustomizing] = useState(false);
   const [draft, setDraft] = useState(DEFAULT_DISTRACTION_PREFERENCES);
@@ -74,12 +76,28 @@ function Player({ pairingError, isPluginPopup }: { pairingError: string; isPlugi
   const basicPlayer = control.paired && !control.loading && !control.settings && !control.error;
   const notificationsEnabled = !off && !control.loading && !applying && !settingsUnavailable;
   const clipsAvailable = isPluginPopup && !!control.settings;
-  const clipsActive = clipsAvailable && watchingClips;
+  const clipsActive = clipsAvailable && !!watchingClips;
   const clipConnectionReady = control.connected && agent.connected;
+  const clipControlsReady = notificationsEnabled && !control.saving && clipConnectionReady;
+  const clipPlayback = clipPlaybackForQueue(agent, manualClipScope);
+  const clearManualClip = manualClipScope !== null &&
+    (!clipConnectionReady || off || !!agent.notice || manualClipScope !== clipPlayback.scope);
+
+  useEffect(() => {
+    // A new interruption or a disconnect ends manual viewing until this popup
+    // explicitly resumes it. Acknowledgements from other windows only update the queue.
+    if (clearManualClip) setManualClipScope(null);
+  }, [clearManualClip]);
+
+  function playClipManually() {
+    if (clipControlsReady && !document.hidden && document.hasFocus()) setManualClipScope(clipPlayback.scope);
+  }
 
   function chooseClips(clips: boolean) {
     if (isPluginPopup) rememberPopupClips(clips);
-    setWatchingClips(clips);
+    setWatchingClips(clips ? 'selected' : null);
+    if (clips && !agent.notice) playClipManually();
+    else setManualClipScope(null);
     setNote('');
   }
 
@@ -170,7 +188,7 @@ function Player({ pairingError, isPluginPopup }: { pairingError: string; isPlugi
             <button className="arcade-customize" onClick={openSettings}>Change games</button>
           </div>}
         </div>
-        {clipsActive && notificationsEnabled && <AgentQueue agent={agent} clipMode onStopDistractions={() => void setEnabled(false)} />}
+        {clipsActive && notificationsEnabled && <AgentQueue agent={agent} onResumeClips={playClipManually} onStopDistractions={() => void setEnabled(false)} />}
         <div className="arcade-mode-row"><span className={off ? 'arcade-mode is-off' : 'arcade-mode'} role="status">{modeLabel}</span>{basicPlayer
           ? <a href="/agent" target="_blank" rel="noreferrer">Get the new controls</a>
           : control.paired
@@ -191,9 +209,11 @@ function Player({ pairingError, isPluginPopup }: { pairingError: string; isPlugi
               : 'Clip paused while your agent reconnects.'}
           </p>}
           <FamilyGuyClips
-            foreground={agent.runs.find((run) => run.run === agent.foregroundRun)}
-            suspended={!notificationsEnabled || control.saving || !clipConnectionReady || !!agent.notice}
+            foreground={clipPlayback.foreground}
+            suspended={!clipControlsReady || !clipPlayback.allowed}
+            onPlay={clipControlsReady && !agent.notice && !clipPlayback.allowed ? playClipManually : undefined}
             sound={preferences.sound}
+            startWithSound={watchingClips === 'selected' && preferences.sound}
             onBack={() => chooseClips(false)}
           />
         </div> : selected && getGame(selected) ? <GameClient key={selected} slug={selected} allowedSlugs={eligible.map((game) => game.slug)} arcade={{

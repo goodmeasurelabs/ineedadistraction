@@ -1,6 +1,18 @@
-import type { AgentRunSnapshot } from '../../lib/agentSession';
+import type { AgentRunSnapshot, AgentSnapshot } from '../../lib/agentSession';
 
 export type ClipTurn = Pick<AgentRunSnapshot, 'run' | 'promptAt' | 'revision' | 'state' | 'reason'>;
+
+/** A local Play click applies only to the currently followed agent report. */
+export function clipPlaybackForQueue(
+  queue: Pick<AgentSnapshot, 'runs' | 'foregroundRun' | 'notice'>,
+  manualScope: string | null,
+) {
+  const foreground = queue.runs.find((run) => run.run === queue.foregroundRun);
+  // A closed chat can still be the foreground after its row leaves the queue.
+  const scope = `${queue.foregroundRun ?? ''}:${foreground?.revision ?? ''}`;
+  const allowed = !queue.notice && (foreground?.state === 'working' || manualScope === scope);
+  return { foreground, scope, allowed };
+}
 
 /** The foreground prompt selects a clip; answering its question continues that clip. */
 export function trackClipTurn(previous: ClipTurn | undefined, foreground?: ClipTurn): { turn: ClipTurn | undefined; rotate: boolean } {

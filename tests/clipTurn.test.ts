@@ -1,8 +1,43 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { trackClipTurn, type ClipTurn } from '../app/arcade/clips/clipTurn';
+import { clipPlaybackForQueue, trackClipTurn, type ClipTurn } from '../app/arcade/clips/clipTurn';
+import type { AgentRunSnapshot } from '../app/lib/agentSession';
 
 const first: ClipTurn = { run: 'chat-a', promptAt: 1000, revision: 4, state: 'working', reason: 'prompt' };
+
+const working: AgentRunSnapshot = {
+  ...first, agent: 'codex', updatedAt: 1000, acknowledged: false, dismissed: false, returnTarget: 'chat',
+};
+
+test('only a working foreground turn starts clips automatically', () => {
+  const done: AgentRunSnapshot = { ...working, run: 'chat-b', revision: 5, state: 'idle', reason: 'done' };
+  const queue = { foregroundRun: done.run, runs: [working, done], notice: null };
+  assert.equal(clipPlaybackForQueue(queue, null).allowed, false);
+  assert.equal(clipPlaybackForQueue({ ...queue, foregroundRun: 'closed-chat' }, null).allowed, false);
+  assert.equal(clipPlaybackForQueue({ ...queue, foregroundRun: working.run }, null).allowed, true);
+  assert.equal(clipPlaybackForQueue({ ...queue, foregroundRun: working.run, notice: done }, null).allowed, false);
+});
+
+test('only a local Play choice can resume a completed or acknowledged turn', () => {
+  for (const state of ['waiting', 'idle'] as const) {
+    const run: AgentRunSnapshot = { ...working, revision: 5, state, reason: state === 'idle' ? 'done' : 'question' };
+    const notified = { foregroundRun: run.run, runs: [run], notice: run };
+    const scope = clipPlaybackForQueue(notified, null).scope;
+    assert.equal(clipPlaybackForQueue(notified, scope).allowed, false);
+    const acknowledged = { ...notified, notice: null, runs: [{ ...run, acknowledged: true, dismissed: state === 'idle' }] };
+    assert.equal(clipPlaybackForQueue(acknowledged, null).allowed, false);
+    assert.equal(clipPlaybackForQueue(acknowledged, scope).allowed, true);
+    assert.equal(clipPlaybackForQueue({ ...acknowledged, runs: [{ ...run, revision: 6 }] }, scope).allowed, false);
+    assert.equal(clipPlaybackForQueue({ ...acknowledged, foregroundRun: 'another-chat' }, scope).allowed, false);
+  }
+});
+
+test('manual playback with a closed chat belongs to that foreground only', () => {
+  const closed = { foregroundRun: working.run, runs: [], notice: null };
+  const scope = clipPlaybackForQueue(closed, null).scope;
+  assert.equal(clipPlaybackForQueue(closed, scope).allowed, true);
+  assert.equal(clipPlaybackForQueue({ ...closed, foregroundRun: null }, scope).allowed, false);
+});
 
 test('the initial prompt establishes a baseline and repeat polls or missing snapshots preserve it', () => {
   assert.deepEqual(trackClipTurn(undefined), { turn: undefined, rotate: false });

@@ -24,7 +24,7 @@ export type YouTubeApi = {
 type YouTubeWindow = Window & { YT?: YouTubeApi; onYouTubeIframeAPIReady?: () => void };
 let apiPromise: Promise<YouTubeApi> | undefined;
 
-/** Shared by the clip players in one popup. Native volume changes stay local to clips. */
+/** Audible playback is chosen for this viewing session. Volume may survive a pause. */
 export type ClipAudio = { sound: boolean; volume?: number };
 
 function loadYouTubeApi(): Promise<YouTubeApi> {
@@ -69,19 +69,38 @@ export type ClipPlayerEvents = {
   onFailure(message: string): void;
 };
 
-/** Start a new attempt whenever the popup shows the player, and release it before it disappears. */
-export function playWhileVisible(element: HTMLElement, start: () => () => void): () => void {
+function popupHasFocus() {
+  return !document.hidden && document.hasFocus();
+}
+
+/** Only the focused popup may play, even when its window remains visible beside another app. */
+export function playWhileVisible(element: HTMLElement, start: (onFocusLost: () => void) => () => void, onLeave?: () => void): () => void {
   let watching = true;
   let pageShown = true;
-  let inView = false;
+  let inView: boolean | undefined;
+  let away = false;
   let stop: (() => void) | undefined;
+  let focusCheck: ReturnType<typeof setInterval> | undefined;
   function update() {
-    if (watching && pageShown && !document.hidden && inView) {
-      stop ??= start();
+    const left = !pageShown || !popupHasFocus() || inView === false;
+    const leaving = left && !away;
+    away = left;
+    if (watching && !left && inView) {
+      if (!stop) {
+        stop = start(update);
+        // When YouTube's cross-origin controls own focus, an app switch can
+        // reach only that frame. Check the top document while the player is live.
+        focusCheck = setInterval(update, 200);
+      }
     } else if (stop) {
-      stop();
+      clearInterval(focusCheck);
+      const release = stop;
       stop = undefined;
+      release();
     }
+    // Sample the outgoing player's volume first. An ordinary clip change
+    // also releases the player, but belongs to the same viewing session.
+    if (watching && leaving) onLeave?.();
   }
   function pageVisibility(event: PageTransitionEvent) {
     pageShown = event.type === 'pageshow';
@@ -93,13 +112,18 @@ export function playWhileVisible(element: HTMLElement, start: () => () => void):
   }, { threshold: 0.5 });
   observer.observe(element);
   document.addEventListener('visibilitychange', update);
+  window.addEventListener('focus', update);
+  window.addEventListener('blur', update);
   window.addEventListener('pagehide', pageVisibility);
   window.addEventListener('pageshow', pageVisibility);
+  update();
   return () => {
     if (!watching) return;
     watching = false;
     observer.disconnect();
     document.removeEventListener('visibilitychange', update);
+    window.removeEventListener('focus', update);
+    window.removeEventListener('blur', update);
     window.removeEventListener('pagehide', pageVisibility);
     window.removeEventListener('pageshow', pageVisibility);
     update();
@@ -110,7 +134,7 @@ export function playWhileVisible(element: HTMLElement, start: () => () => void):
 export function mountClipPlayer(
   host: HTMLDivElement,
   clip: Clip,
-  options: { start: number; audio: ClipAudio },
+  options: { start: number; audio: ClipAudio; onFocusLost?(): void },
   events: ClipPlayerEvents,
   loadApi = loadYouTubeApi,
 ) {
@@ -121,7 +145,6 @@ export function mountClipPlayer(
   const audio = options.audio;
   let played = false;
   let startedMuted = true;
-  let autoplayMuted = false;
   let watchdog: ReturnType<typeof setTimeout> | undefined;
   const stop = () => {
     if (active) {
@@ -133,25 +156,37 @@ export function mountClipPlayer(
       if (played && player) {
         try {
           const muted = player.isMuted();
-          // A browser-enforced mute is temporary. A native unmute is a choice.
-          if (typeof muted === 'boolean' && (!autoplayMuted || !muted)) audio.sound = !muted;
+          if (typeof muted === 'boolean') audio.sound = !muted;
           const volume = player.getVolume();
           if (Number.isInteger(volume) && volume >= 0 && volume <= 100) audio.volume = volume;
         } catch { /* keep the last known audio settings */ }
       }
       try { const t = player?.getCurrentTime(); if (t && Number.isFinite(t)) position = t; } catch { /* not ready */ }
+      // Removing a focused cross-origin frame can leave the popup without
+      // document focus. Hand it back before replacing native YouTube controls.
+      if (frame && host.isConnected && document.activeElement === frame && popupHasFocus()) {
+        host.tabIndex = -1;
+        try { host.focus({ preventScroll: true }); } catch { /* always release the iframe */ }
+      }
       try { player?.pauseVideo(); } catch { /* not ready */ }
       try { player?.destroy(); } catch { /* remove the iframe ourselves below */ }
       frame?.remove();
     }
     return position;
   };
+  const canPlay = () => {
+    if (!active || !host.isConnected) return false;
+    if (popupHasFocus()) return true;
+    // A one-shot SDK callback can arrive before the focus check. Release
+    // this attempt now so refocusing gets a fresh player and ready event.
+    options.onFocusLost?.();
+    return false;
+  };
   const fail = (message: string) => {
-    if (!active) return;
+    if (!canPlay()) return;
     stop();
     events.onFailure(message);
   };
-  const canPlay = () => active && host.isConnected && !document.hidden;
 
   void loadApi().then((api) => {
     if (!canPlay()) return;
@@ -171,10 +206,7 @@ export function mountClipPlayer(
         if (!canPlay()) return;
         clearTimeout(watchdog);
         try {
-          // Start a cold popup quietly. When replacing a playing clip, try its
-          // actual audio settings; the browser can still request a muted retry.
-          startedMuted = !audio.sound || (audio.volume === undefined && !window.navigator?.userActivation?.hasBeenActive);
-          autoplayMuted = startedMuted && audio.sound;
+          startedMuted = !audio.sound;
           if (audio.volume !== undefined) target.setVolume(audio.volume);
           if (startedMuted) target.mute();
           else target.unMute();
@@ -193,7 +225,7 @@ export function mountClipPlayer(
         if (!canPlay()) return;
         if (!startedMuted) {
           startedMuted = true;
-          autoplayMuted = true;
+          audio.sound = false;
           try {
             target.mute();
             target.playVideo();
@@ -203,7 +235,7 @@ export function mountClipPlayer(
         }
       },
       onError({ data }) {
-        if (!active) return;
+        if (!canPlay()) return;
         if ([100, 101, 150].includes(data)) { stop(); events.onUnavailable(); }
         else fail(data === 153 ? 'YouTube could not identify this popup.' : 'YouTube could not play this clip.');
       },
@@ -213,10 +245,9 @@ export function mountClipPlayer(
   return {
     stop,
     setSound(next: boolean) {
-      if (!active) return;
+      if (!active || (next && !canPlay())) return;
       audio.sound = next;
       startedMuted = !next;
-      autoplayMuted = false;
       try {
         if (next) player?.unMute();
         else player?.mute();

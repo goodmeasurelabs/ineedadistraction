@@ -7,6 +7,8 @@ type Hooks = ConstructorParameters<YouTubeApi['Player']>[1]['events'];
 const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 function fixture(t: TestContext, sound = false) {
+  const sessions: ReturnType<typeof mountClipPlayer>[] = [];
+  t.after(() => { for (const session of sessions) session.stop(); });
   const audio: ClipAudio = { sound };
   const added: string[] = [];
   const fakeHost = {
@@ -14,7 +16,7 @@ function fixture(t: TestContext, sound = false) {
     children: [] as { src: string }[],
     append(child: { src: string }) { this.children.push(child); },
   };
-  const view = Object.assign(new EventTarget(), { hidden: false, createElement: () => ({
+  const view = Object.assign(new EventTarget(), { hidden: false, focused: true, hasFocus() { return this.focused; }, createElement: () => ({
     src: '',
     remove() { fakeHost.children = fakeHost.children.filter((child) => child !== this); },
   }) });
@@ -46,12 +48,12 @@ function fixture(t: TestContext, sound = false) {
   }
   let resolveApi!: (api: YouTubeApi) => void;
   const pending = new Promise<YouTubeApi>((resolve) => { resolveApi = resolve; });
-  const start = (seconds = 0, clip = FAMILY_GUY_CLIPS[0]) => {
-    const session = mountClipPlayer(fakeHost as unknown as HTMLDivElement, clip, { start: seconds, audio }, {
+  const start = (seconds = 0, clip = FAMILY_GUY_CLIPS[0], onFocusLost?: () => void) => {
+    const session = mountClipPlayer(fakeHost as unknown as HTMLDivElement, clip, { start: seconds, audio, onFocusLost }, {
       onPlaying: () => added.push('playing'), onPressPlay: () => added.push('pressPlay'),
       onEnded: () => added.push('ended'), onUnavailable: () => added.push('skip'), onFailure: () => added.push('error'),
     }, () => pending);
-    t.after(() => session.stop());
+    sessions.push(session);
     return session;
   };
   return { audio, view, browser, userActivation, fakeHost, added, start, player: () => realPlayer, load: async () => { resolveApi({ Player: StubPlayer }); await flush(); },
@@ -121,8 +123,7 @@ test('an interruption stops a playing clip and the next player starts automatica
   resume.stop();
 });
 
-test('playback follows popup visibility and ignores queued visibility events after Stop', async (t) => {
-  const f = fixture(t);
+function observePlayer(t: TestContext) {
   let report!: (entries: { intersectionRatio: number }[]) => void;
   class Observer {
     constructor(callback: typeof report) { report = callback; }
@@ -135,6 +136,12 @@ test('playback follows popup visibility and ignores queued visibility events aft
     if (previous) Object.defineProperty(globalThis, 'IntersectionObserver', previous);
     else Reflect.deleteProperty(globalThis, 'IntersectionObserver');
   });
+  return (intersectionRatio: number) => report([{ intersectionRatio }]);
+}
+
+test('playback follows popup visibility and ignores queued visibility events after Stop', async (t) => {
+  const f = fixture(t);
+  const report = observePlayer(t);
   let bookmark = 0;
   f.view.hidden = true;
   const stop = playWhileVisible(f.fakeHost as unknown as HTMLElement, () => {
@@ -143,7 +150,7 @@ test('playback follows popup visibility and ignores queued visibility events aft
   });
   t.after(stop);
   await f.load();
-  report([{ intersectionRatio: 1 }]);
+  report(1);
   assert.equal(f.added.length, 0);
 
   f.view.hidden = false;
@@ -151,9 +158,9 @@ test('playback follows popup visibility and ignores queued visibility events aft
   await flush();
   f.hooks().onReady(f.event());
   assert.equal(f.added.at(-1), 'play');
-  report([{ intersectionRatio: 0.2 }]);
+  report(0.2);
   assert.equal(f.fakeHost.children.length, 0);
-  report([{ intersectionRatio: 1 }]);
+  report(1);
   await flush();
   assert.equal(new URL(f.fakeHost.children[0].src).searchParams.get('start'), '11');
 
@@ -163,15 +170,173 @@ test('playback follows popup visibility and ignores queued visibility events aft
   await flush();
   assert.equal(f.fakeHost.children.length, 1);
   stop();
-  report([{ intersectionRatio: 1 }]);
+  report(1);
   f.browser.dispatchEvent(new Event('pageshow'));
   f.view.dispatchEvent(new Event('visibilitychange'));
   await flush();
   assert.equal(f.fakeHost.children.length, 0);
 });
 
-test('a newly opened popup starts silently without requesting a click even with sound preferred', async (t) => {
+test('an unfocused visible popup stays quiet through SDK loading and focus restoration', async (t) => {
   const f = fixture(t, true);
+  const report = observePlayer(t);
+  f.view.focused = false;
+  const stop = playWhileVisible(f.fakeHost as unknown as HTMLElement, () => {
+    const session = f.start();
+    return () => { session.stop(); };
+  }, () => { f.audio.sound = false; });
+  try {
+    report(1);
+    assert.equal(f.audio.sound, false, 'losing focus disarms sound even before a player exists');
+    await f.load();
+    assert.deepEqual(f.fakeHost.children, []);
+    f.view.focused = true;
+    f.browser.dispatchEvent(new Event('focus'));
+    await flush();
+    f.hooks().onReady(f.event());
+    assert.deepEqual(f.added, ['create', 'mute', 'play']);
+    f.hooks().onStateChange(f.event(1));
+    f.player().unMute();
+  } finally { stop(); }
+  assert.equal(f.audio.sound, true, 'ordinary replacement keeps the native unmute');
+});
+
+test('switching apps stops a visible clip on blur and resumes its bookmark quietly', async (t) => {
+  const f = fixture(t, true);
+  const report = observePlayer(t);
+  let bookmark = 0;
+  const stop = playWhileVisible(f.fakeHost as unknown as HTMLElement, () => {
+    const session = f.start(bookmark);
+    return () => { bookmark = session.stop(); };
+  }, () => { f.audio.sound = false; });
+  try {
+    report(1);
+    await f.load();
+    const old = f.hooks();
+    old.onReady(f.event());
+    old.onStateChange(f.event(1));
+    f.player().setVolume(46);
+    assert.equal(f.player().isMuted(), false);
+
+    f.view.focused = false;
+    f.browser.dispatchEvent(new Event('blur'));
+    assert.equal(f.fakeHost.children.length, 0);
+    assert.deepEqual(f.audio, { sound: false, volume: 46 });
+    const stopped = [...f.added];
+    old.onReady(f.event()); old.onAutoplayBlocked(f.event()); old.onStateChange(f.event(0)); old.onError(f.event(150));
+    report(1);
+    assert.deepEqual(f.added, stopped);
+
+    f.view.focused = true;
+    f.browser.dispatchEvent(new Event('focus'));
+    await flush();
+    assert.equal(new URL(f.fakeHost.children[0].src).searchParams.get('start'), '11');
+    f.hooks().onReady(f.event());
+    assert.equal(f.player().isMuted(), true);
+    assert.equal(f.player().getVolume(), 46);
+  } finally { stop(); }
+});
+
+test('switching apps while the SDK loads cancels the pending player before it can create a frame', async (t) => {
+  const f = fixture(t, true);
+  const report = observePlayer(t);
+  const stop = playWhileVisible(f.fakeHost as unknown as HTMLElement, () => f.start().stop, () => { f.audio.sound = false; });
+  try {
+    report(1);
+    f.view.focused = false;
+    f.browser.dispatchEvent(new Event('blur'));
+    await f.load();
+    assert.deepEqual(f.added, []);
+    assert.deepEqual(f.fakeHost.children, []);
+    assert.equal(f.audio.sound, false);
+  } finally { stop(); }
+});
+
+for (const stage of ['SDK', 'iframe'] as const) {
+  test(`a ${stage} ready callback during brief focus loss retries on return before the fallback timer runs`, async (t) => {
+    const f = fixture(t, true);
+    const report = observePlayer(t);
+    const stop = playWhileVisible(f.fakeHost as unknown as HTMLElement,
+      (onFocusLost) => f.start(0, undefined, onFocusLost).stop, () => { f.audio.sound = false; });
+    try {
+      report(1);
+      if (stage === 'iframe') await f.load();
+      f.view.focused = false;
+      if (stage === 'SDK') await f.load();
+      else f.hooks().onReady(f.event());
+      assert.equal(f.audio.sound, false);
+      assert.equal(f.fakeHost.children.length, 0);
+      f.view.focused = true;
+      f.browser.dispatchEvent(new Event('focus'));
+      await flush();
+      f.hooks().onReady(f.event());
+      assert.equal(f.fakeHost.children.length, 1);
+      assert.equal(f.player().isMuted(), true);
+      assert.equal(f.added.at(-1), 'play');
+    } finally { stop(); }
+  });
+}
+
+test('native controls retain focus inside the popup, then a missed app blur releases the embed', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const f = fixture(t, true);
+  const report = observePlayer(t);
+  let session: ReturnType<typeof f.start>;
+  const stop = playWhileVisible(f.fakeHost as unknown as HTMLElement, () => {
+    session = f.start();
+    return session.stop;
+  }, () => { f.audio.sound = false; });
+  try {
+    report(1);
+    await f.load();
+    f.hooks().onReady(f.event());
+    f.hooks().onStateChange(f.event(1));
+    // Chromium fires top-window blur as focus moves into a cross-origin child.
+    f.browser.dispatchEvent(new Event('blur'));
+    t.mock.timers.tick(250);
+    assert.equal(f.fakeHost.children.length, 1);
+    assert.equal(f.audio.sound, true);
+    f.view.focused = false;
+    const before = [...f.added];
+    f.hooks().onReady(f.event()); f.hooks().onAutoplayBlocked(f.event());
+    f.hooks().onStateChange(f.event(0)); f.hooks().onError(f.event(150));
+    session!.setSound(true);
+    assert.deepEqual(f.added, before, 'callbacks cannot restart, rotate, or unmute an unfocused clip');
+    t.mock.timers.tick(250);
+    assert.equal(f.fakeHost.children.length, 0);
+    assert.equal(f.audio.sound, false);
+  } finally { stop(); }
+});
+
+test('a focused native player hands focus back to the popup before natural clip replacement', async (t) => {
+  const f = fixture(t);
+  const host = Object.assign(f.fakeHost, {
+    tabIndex: 0,
+    focus({ preventScroll }: FocusOptions) {
+      assert.equal(preventScroll, true);
+      f.added.push('focus-host');
+    },
+  });
+  f.start();
+  await f.load();
+  Object.assign(f.view, { activeElement: host.children[0] });
+  f.hooks().onReady(f.event());
+  f.hooks().onStateChange(f.event(1));
+  f.hooks().onStateChange(f.event(0));
+  assert.equal(host.tabIndex, -1);
+  assert.deepEqual(f.added.slice(-4), ['focus-host', 'pause', 'destroy', 'ended']);
+
+  const next = f.start();
+  await flush();
+  Object.assign(f.view, { activeElement: host.children[0], focused: false });
+  next.stop();
+  assert.equal(f.added.filter((action) => action === 'focus-host').length, 1);
+});
+
+test('a quiet session starts silently even with an earlier document interaction and saved volume', async (t) => {
+  const f = fixture(t);
+  f.userActivation.hasBeenActive = true;
+  f.audio.volume = 63;
   f.start();
   await f.load();
   f.hooks().onReady(f.event());
@@ -265,7 +430,7 @@ test('an embed that fails before playing and its late callbacks preserve the pre
   assert.equal(f.player().getVolume(), 24);
 });
 
-test('a browser-required muted retry preserves the audible choice for the next clip', async (t) => {
+test('a browser-required muted retry keeps the next clip muted until the viewer unmutes', async (t) => {
   const f = fixture(t, true);
   f.audio.volume = 63;
   f.start();
@@ -280,7 +445,7 @@ test('a browser-required muted retry preserves the audible choice for the next c
   f.start(0, FAMILY_GUY_CLIPS[1]);
   await flush();
   f.hooks().onReady(f.event());
-  assert.equal(f.player().isMuted(), false);
+  assert.equal(f.player().isMuted(), true);
   assert.equal(f.player().getVolume(), 63);
   assert.equal(f.added.at(-1), 'play');
 });
