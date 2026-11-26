@@ -1,5 +1,6 @@
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
+import { onPopupRefocus } from '../app/arcade/clipWindow';
 import { FAMILY_GUY_CLIPS } from '../app/arcade/clips/catalog';
 import { mountClipPlayer, playWhileVisible, type ClipAudio, type YouTubeApi } from '../app/arcade/clips/youtube';
 
@@ -235,6 +236,65 @@ test('switching apps stops a visible clip on blur and resumes its bookmark quiet
     assert.equal(f.player().isMuted(), true);
     assert.equal(f.player().getVolume(), 46);
   } finally { stop(); }
+});
+
+test('Back to Codex holds the bookmarked clip until the popup actually leaves and returns', async (t) => {
+  const f = fixture(t);
+  const playing = f.start();
+  await f.load();
+  const old = f.hooks();
+  old.onReady(f.event());
+  old.onStateChange(f.event(1));
+  const original = new URL(f.fakeHost.children[0].src);
+  const bookmark = playing.stop();
+  const cancel = onPopupRefocus(() => { f.start(bookmark); });
+
+  const stopped = [...f.added];
+  // A delayed focus request leaves the old popup visible and focused. Chromium
+  // can also dispatch blur when focus moves between the page and its iframe.
+  f.browser.dispatchEvent(new Event('blur'));
+  f.browser.dispatchEvent(new Event('focus'));
+  old.onStateChange(f.event(0));
+  old.onError(f.event(150));
+  await flush();
+  assert.equal(f.fakeHost.children.length, 0);
+  assert.deepEqual(f.added, stopped);
+
+  f.view.focused = false;
+  f.browser.dispatchEvent(new Event('blur'));
+  old.onReady(f.event());
+  old.onStateChange(f.event(0));
+  f.view.dispatchEvent(new Event('visibilitychange'));
+  await flush();
+  assert.deepEqual(f.added, stopped);
+
+  f.view.focused = true;
+  f.browser.dispatchEvent(new Event('focus'));
+  f.view.dispatchEvent(new Event('visibilitychange'));
+  await flush();
+  cancel();
+  assert.equal(f.fakeHost.children.length, 1);
+  const resumed = new URL(f.fakeHost.children[0].src);
+  assert.equal(resumed.pathname, original.pathname);
+  assert.equal(resumed.searchParams.get('start'), '11');
+  f.hooks().onReady(f.event());
+  assert.deepEqual(f.added.slice(stopped.length), ['create', 'mute', 'play']);
+});
+
+test('explicit Play after a failed handoff removes the pending automatic resume', async (t) => {
+  const f = fixture(t);
+  const automaticResume = t.mock.fn();
+  const cancel = onPopupRefocus(automaticResume);
+  cancel();
+  f.start();
+  await f.load();
+  f.hooks().onReady(f.event());
+  f.view.hidden = true;
+  f.view.dispatchEvent(new Event('visibilitychange'));
+  f.view.hidden = false;
+  f.view.dispatchEvent(new Event('visibilitychange'));
+  assert.equal(automaticResume.mock.callCount(), 0);
+  assert.deepEqual(f.added, ['create', 'mute', 'play']);
 });
 
 test('switching apps while the SDK loads cancels the pending player before it can create a frame', async (t) => {

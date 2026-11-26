@@ -6,10 +6,14 @@ export type ClipTurn = Pick<AgentRunSnapshot, 'run' | 'promptAt' | 'revision' | 
 export function clipPlaybackForQueue(
   queue: Pick<AgentSnapshot, 'runs' | 'foregroundRun' | 'notice'>,
   manualScope: string | null,
+  returningToAgent = false,
 ) {
   const foreground = queue.runs.find((run) => run.run === queue.foregroundRun);
   // A closed chat can still be the foreground after its row leaves the queue.
   const scope = `${queue.foregroundRun ?? ''}:${foreground?.revision ?? ''}`;
+  // A local handoff pauses both playback and prompt-driven clip selection.
+  // Keep the scope so Play can resume even if the focus request fails.
+  if (returningToAgent) return { foreground: undefined, scope, allowed: false };
   const allowed = !queue.notice && (foreground?.state === 'working' || manualScope === scope);
   return { foreground, scope, allowed };
 }

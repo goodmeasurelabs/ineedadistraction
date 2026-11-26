@@ -1,3 +1,4 @@
+import { popupHasFocus } from '../clipWindow';
 import type { Clip } from './catalog';
 
 type VideoPlayer = {
@@ -68,10 +69,6 @@ export type ClipPlayerEvents = {
   onUnavailable(): void;
   onFailure(message: string): void;
 };
-
-function popupHasFocus() {
-  return !document.hidden && document.hasFocus();
-}
 
 /** Only the focused popup may play, even when its window remains visible beside another app. */
 export function playWhileVisible(element: HTMLElement, start: (onFocusLost: () => void) => () => void, onLeave?: () => void): () => void {

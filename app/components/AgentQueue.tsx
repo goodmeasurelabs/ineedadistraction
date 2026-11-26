@@ -23,7 +23,12 @@ function returnLabel(run: AgentRunSnapshot): string {
   return `Back to ${name(run)}`;
 }
 
-export default function AgentQueue({ agent, onStopDistractions, onResumeClips }: { agent: AgentSync; onStopDistractions?: () => void; onResumeClips?: () => void }) {
+export default function AgentQueue({ agent, onStopDistractions, onResumeClips, onReturnToAgent }: {
+  agent: AgentSync;
+  onStopDistractions?: () => void;
+  onResumeClips?: () => void;
+  onReturnToAgent?: () => void;
+}) {
   const dialog = useRef<HTMLDialogElement>(null);
   const { note, back, clear } = useReturnToAgent();
   const [error, setError] = useState('');
@@ -67,12 +72,12 @@ export default function AgentQueue({ agent, onStopDistractions, onResumeClips }:
   }
 
   async function returnTo(run: AgentRunSnapshot) {
+    onReturnToAgent?.();
     setBusy(true);
     setError('');
     trackEvent('agent_return_click', { location: 'queue', agent: run.agent ?? 'agent' });
     try {
-      // Keep clips paused while the user switches to their agent to answer.
-      // Its next working report clears the notice and resumes playback.
+      // In clip mode the user can still choose Back to clips on this notice.
       if (await back(run) && !onResumeClips) await updateAgentQueue('ack', run);
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Could not update the queue.');

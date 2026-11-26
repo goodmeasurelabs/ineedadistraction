@@ -39,6 +39,21 @@ test('manual playback with a closed chat belongs to that foreground only', () =>
   assert.equal(clipPlaybackForQueue({ ...closed, foregroundRun: null }, scope).allowed, false);
 });
 
+test('returning to an agent holds the current clip through queue updates until the popup resumes', () => {
+  const done: AgentRunSnapshot = { ...working, run: 'chat-b', revision: 5, state: 'idle', reason: 'done' };
+  for (const run of [working, done, { ...working, revision: 6, promptAt: 1200 }]) {
+    const queue = { foregroundRun: run.run, runs: [run], notice: null };
+    const scope = clipPlaybackForQueue(queue, null).scope;
+    for (const manual of [null, scope]) {
+      const held = clipPlaybackForQueue(queue, manual, true);
+      assert.equal(held.allowed, false);
+      assert.equal(trackClipTurn(first, held.foreground).rotate, false);
+      assert.equal(held.scope, scope);
+    }
+    assert.equal(clipPlaybackForQueue(queue, scope, false).allowed, true);
+  }
+});
+
 test('the initial prompt establishes a baseline and repeat polls or missing snapshots preserve it', () => {
   assert.deepEqual(trackClipTurn(undefined), { turn: undefined, rotate: false });
   assert.deepEqual(trackClipTurn(undefined, first), { turn: first, rotate: false });

@@ -2,6 +2,30 @@ type Bounds = { left: number; top: number; width: number; height: number };
 
 const GAME_BOUNDS_KEY = 'inad:game-window-bounds:v1';
 
+export function popupHasFocus() {
+  return !document.hidden && document.hasFocus();
+}
+
+/** A focus request can fail or take time. Wait for the popup to actually leave and return. */
+export function onPopupRefocus(onReturn: () => void) {
+  let left = !popupHasFocus();
+  function checkFocus() {
+    if (!popupHasFocus()) left = true;
+    else if (left) {
+      left = false;
+      onReturn();
+    }
+  }
+  window.addEventListener('blur', checkFocus);
+  window.addEventListener('focus', checkFocus);
+  document.addEventListener('visibilitychange', checkFocus);
+  return () => {
+    window.removeEventListener('blur', checkFocus);
+    window.removeEventListener('focus', checkFocus);
+    document.removeEventListener('visibilitychange', checkFocus);
+  };
+}
+
 function availableScreen(): Bounds {
   // Chromium exposes the current monitor's usable origin as well as its size.
   const screen = window.screen as Screen & { availLeft?: number; availTop?: number };

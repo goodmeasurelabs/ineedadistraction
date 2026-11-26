@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useReducer, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useReducer, useRef, useState, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import GameClient from '../games/[slug]/GameClient';
@@ -13,7 +13,7 @@ import AgentQueue from '../components/AgentQueue';
 import { trackEvent } from '../lib/analytics';
 import { INITIAL_DISTRACTION_HOLD, distractionHoldReducer } from '../lib/distractionHold';
 import { initializeArcadePairing, prefersPopupClips, rememberPopupClips } from './popupSession';
-import { initializePopupWindow } from './clipWindow';
+import { initializePopupWindow, onPopupRefocus, popupHasFocus } from './clipWindow';
 import { clipPlaybackForQueue } from './clips/clipTurn';
 
 const DRAFT_KEY = 'inad:setup-preferences:v1';
@@ -61,6 +61,7 @@ function Player({ pairingError, isPluginPopup }: { pairingError: string; isPlugi
     isPluginPopup && !new URLSearchParams(window.location.search).has('game') && prefersPopupClips() ? 'restored' : null
   );
   const [manualClipScope, setManualClipScope] = useState<string | null>(null);
+  const [returningToAgent, setReturningToAgent] = useState(false);
   const [hold, dispatchHold] = useReducer(distractionHoldReducer, INITIAL_DISTRACTION_HOLD);
   const [customizing, setCustomizing] = useState(false);
   const [draft, setDraft] = useState(DEFAULT_DISTRACTION_PREFERENCES);
@@ -79,7 +80,7 @@ function Player({ pairingError, isPluginPopup }: { pairingError: string; isPlugi
   const clipsActive = clipsAvailable && !!watchingClips;
   const clipConnectionReady = control.connected && agent.connected;
   const clipControlsReady = notificationsEnabled && !control.saving && clipConnectionReady;
-  const clipPlayback = clipPlaybackForQueue(agent, manualClipScope);
+  const clipPlayback = clipPlaybackForQueue(agent, manualClipScope, returningToAgent);
   const clearManualClip = manualClipScope !== null &&
     (!clipConnectionReady || off || !!agent.notice || manualClipScope !== clipPlayback.scope);
 
@@ -89,11 +90,23 @@ function Player({ pairingError, isPluginPopup }: { pairingError: string; isPlugi
     if (clearManualClip) setManualClipScope(null);
   }, [clearManualClip]);
 
+  useLayoutEffect(() => {
+    if (returningToAgent) return onPopupRefocus(() => setReturningToAgent(false));
+  }, [returningToAgent]);
+
+  function pauseForAgent() {
+    setManualClipScope(null);
+    setReturningToAgent(true);
+  }
+
   function playClipManually() {
-    if (clipControlsReady && !document.hidden && document.hasFocus()) setManualClipScope(clipPlayback.scope);
+    if (!clipControlsReady || !popupHasFocus()) return;
+    setReturningToAgent(false);
+    setManualClipScope(clipPlayback.scope);
   }
 
   function chooseClips(clips: boolean) {
+    setReturningToAgent(false);
     if (isPluginPopup) rememberPopupClips(clips);
     setWatchingClips(clips ? 'selected' : null);
     if (clips && !agent.notice) playClipManually();
@@ -188,7 +201,7 @@ function Player({ pairingError, isPluginPopup }: { pairingError: string; isPlugi
             <button className="arcade-customize" onClick={openSettings}>Change games</button>
           </div>}
         </div>
-        {clipsActive && notificationsEnabled && <AgentQueue agent={agent} onResumeClips={playClipManually} onStopDistractions={() => void setEnabled(false)} />}
+        {clipsActive && notificationsEnabled && <AgentQueue agent={agent} onReturnToAgent={pauseForAgent} onResumeClips={playClipManually} onStopDistractions={() => void setEnabled(false)} />}
         <div className="arcade-mode-row"><span className={off ? 'arcade-mode is-off' : 'arcade-mode'} role="status">{modeLabel}</span>{basicPlayer
           ? <a href="/agent" target="_blank" rel="noreferrer">Get the new controls</a>
           : control.paired
