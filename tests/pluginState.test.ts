@@ -9,13 +9,18 @@ const plugin = resolve('plugin');
 type Handler = { command: string };
 type Group = { matcher?: string; hooks: Handler[] };
 
-function session(agent: 'codex' | 'claude' = 'codex', options: { autoOpen?: boolean; os?: 'Darwin' | 'Linux'; noReturn?: boolean } = {}) {
+function session(agent: 'codex' | 'claude' = 'codex', options: { autoOpen?: boolean; os?: 'Darwin' | 'Linux'; noReturn?: boolean; sessionId?: string } = {}) {
   const manifest = JSON.parse(readFileSync(join(plugin, '.codex-plugin/plugin.json'), 'utf8'));
   const file = agent === 'codex' ? manifest.hooks : 'hooks/hooks.json';
   const hooks = JSON.parse(readFileSync(join(plugin, file), 'utf8')).hooks as Record<string, Group[]>;
   const dir = mkdtempSync(join(tmpdir(), 'inad-state-test-'));
-  const transcript = join(dir, 'transcript.jsonl');
-  writeFileSync(transcript, JSON.stringify({ type: 'session_meta', payload: { id: 'root-session', source: 'vscode', thread_source: 'user' } }) + '\n');
+  const root = options.sessionId ?? 'root-session';
+  function writeTranscript(id: string, meta: Record<string, unknown> = {}) {
+    const path = join(dir, `${id}.jsonl`);
+    writeFileSync(path, JSON.stringify({ type: 'session_meta', payload: { id, source: 'vscode', thread_source: 'user', ...meta } }) + '\n');
+    return path;
+  }
+  const transcript = writeTranscript(root);
   // The foreground state transition is real; background reports and macOS
   // helpers are stubbed so tests cannot access the network or switch apps.
   writeFileSync(join(dir, 'sh'), `#!/bin/sh
@@ -47,9 +52,11 @@ printf '{"attached":false}'
     return file;
   }
   return {
+    writeTranscript,
+    runFiles() { return readdirSync(dir).filter((name) => /^run\.\d+$/.test(name)).sort(); },
     event(event: string, fields: Record<string, unknown> = {}, reverse = false) {
       const input = {
-        session_id: 'root-session',
+        session_id: root,
         turn_id: 'test-turn',
         transcript_path: agent === 'codex' ? transcript : '/isolated/.claude/transcript.jsonl',
         hook_event_name: event,
@@ -76,7 +83,8 @@ printf '{"attached":false}'
           assert.ok(result.stdout === '' || result.stdout === '{}', result.stdout);
         }
       }
-      return readFileSync(join(dir, 'last'), 'utf8');
+      const last = join(dir, 'last');
+      return existsSync(last) ? readFileSync(last, 'utf8') : '';
     },
     record() {
       const [state, reason, label, at, id, promptAt, target, locator] = readFileSync(join(dir, runFile()), 'utf8').trim().split(' ');
@@ -159,8 +167,8 @@ test('automatic opening on other platforms happens once per session, including i
 });
 
 test('prompt identity survives a coalesced stop, retries, duplicates, and a fast quit', () => {
-  const s = session();
   const session_id = 'a1234567-b123-c123-d123-e12345678901';
+  const s = session('codex', { sessionId: session_id });
   try {
     s.event('UserPromptSubmit', { session_id, prompt: 'private prompt' });
     const working = s.record();
@@ -182,6 +190,58 @@ test('prompt identity survives a coalesced stop, retries, duplicates, and a fast
       eventAt: finished.at, eventId: finished.id, promptAt: working.at, returnTarget: 'chat',
     });
     assert.notEqual(failed.session, session_id);
+  } finally { s.close(); }
+});
+
+test('an unsaved Codex session after a completed user turn cannot replace its foreground or send a report', () => {
+  const s = session();
+  try {
+    s.event('UserPromptSubmit');
+    assert.equal(s.event('Stop'), 'waiting done codex');
+    const finished = s.record();
+    const sent = s.send();
+    const originalRuns = s.runFiles();
+    const background = { session_id: 'ephemeral', transcript_path: '/missing/ephemeral.jsonl' };
+    for (const event of ['UserPromptSubmit', 'PreModelRequest', 'Stop', 'SessionEnd']) {
+      assert.equal(s.event(event, { ...background, kind: 'sampling' }), 'waiting done codex');
+      assert.deepEqual(s.runFiles(), originalRuns);
+      assert.deepEqual(s.record(), finished);
+    }
+    assert.deepEqual(s.send(), sent);
+  } finally { s.close(); }
+});
+
+test('a Codex child sharing the parent session cannot finish its active turn or restart its completed turn', () => {
+  const s = session();
+  try {
+    s.event('UserPromptSubmit');
+    const working = s.record();
+    const child = { transcript_path: s.writeTranscript('child', {
+      session_id: 'root-session', source: { subagent: { thread_spawn: {} } }, thread_source: 'subagent',
+    }) };
+    s.event('Stop', child);
+    assert.deepEqual(s.record(), working);
+    s.event('Stop');
+    const finished = s.record();
+    for (const fields of [child, { agent_id: 'child' }]) {
+      for (const event of ['UserPromptSubmit', 'PreModelRequest', 'SessionEnd']) {
+        s.event(event, { ...fields, kind: 'sampling' });
+        assert.deepEqual(s.record(), finished);
+      }
+    }
+    assert.equal(s.runFiles().length, 1);
+  } finally { s.close(); }
+});
+
+test('separately prompted user-owned Codex chats and forks keep independent runs', () => {
+  const s = session();
+  try {
+    s.event('UserPromptSubmit');
+    s.event('Stop');
+    const fork = { session_id: 'fork', thread_id: 'fork', transcript_path: s.writeTranscript('fork', { parent_thread_id: 'root-session' }) };
+    assert.equal(s.event('UserPromptSubmit', fork), 'working prompt codex');
+    assert.equal(s.event('Stop', fork), 'waiting done codex');
+    assert.equal(s.runFiles().length, 2);
   } finally { s.close(); }
 });
 

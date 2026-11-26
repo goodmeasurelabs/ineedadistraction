@@ -28,7 +28,7 @@ Send a prompt in your active coding app to open the paired arcade. On macOS, plu
 
 On macOS, the return button opens the selected Codex Desktop chat or the originating iTerm pane for Codex CLI and Claude Code. Other terminals can come forward at the app level. A closed iTerm pane falls back to opening its app.
 
-Codex has its own hook configuration: ordinary tool calls keep the game running, questions pause it, and continued turns resume it if a Stop hook asks Codex to keep working. Background compaction and child-agent model requests do not resume a finished turn.
+Codex has its own hook configuration: ordinary tool calls keep the game running, questions pause it, and continued turns resume it if a Stop hook asks Codex to keep working. Starting with plugin 0.5.2, the arcade follows prompts from identifiable user chats. A background Codex session can finish its work while the popup keeps showing your chat’s completion notice.
 
 Asynchronous Codex questions remain paused while other work continues. A local Python 3 helper matches question IDs to structured replies in the latest 16 MB of the local transcript. It stores only call IDs, question counts and answered indices; no question or answer text leaves the machine. This transcript format is a compatibility interface: if Python or the metadata is unavailable, the game stays paused until a fresh prompt instead of assuming the question was answered.
 

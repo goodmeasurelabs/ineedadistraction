@@ -29,7 +29,7 @@ In Codex, guide the user to review and trust the plugin's hooks in Settings > Ho
 
 Preference controls require plugin 0.5.0 or newer and Python 3. Locate the installed plugin's `scripts/settings.py` and `scripts/open.sh` using its installation path. If these are missing, update the plugin using the agent's supported plugin manager, then complete any new hook review.
 
-For an existing Codex installation, run `codex plugin marketplace upgrade ineedadistraction`, then `codex plugin add distraction@ineedadistraction`. For Claude Code, run `claude plugin marketplace update ineedadistraction`, then `claude plugin update distraction@ineedadistraction`. Follow the client's restart or hook-review instructions. Refresh the distraction popup once after updating (Cmd+R on macOS, Ctrl+R elsewhere); opening it again only brings the existing window forward.
+Codex plugin 0.5.2 fixes a disappearing completion notice when background work starts after a user turn finishes. For an existing Codex installation, run `codex plugin marketplace upgrade ineedadistraction`, then `codex plugin add distraction@ineedadistraction`. For Claude Code, run `claude plugin marketplace update ineedadistraction`, then `claude plugin update distraction@ineedadistraction`. Follow the client's restart or hook-review instructions. Refresh the distraction popup once after updating (Cmd+R on macOS, Ctrl+R elsewhere); opening it again only brings the existing window forward.
 
 ## Apply the user's chosen mix
 

@@ -144,6 +144,15 @@ fi
 
 finish() { [ "$REASON" = "done" ] && printf '{}'; exit 0; }
 
+# Codex also emits ordinary lifecycle hooks for children and ephemeral work.
+# Even a prompt followed by Stop can otherwise replace the user's foreground
+# chat, or overwrite its run when the child shares the parent's session ID.
+ORIGIN=unknown
+if [ "$AGENT" = codex ]; then
+  ORIGIN=$(printf '%s' "$INPUT" | python3 "$HERE/codex-context.py" session-origin 2>/dev/null)
+  [ "$ORIGIN" = user ] || finish
+fi
+
 # The settings controller is deliberately independent of the return listener.
 # It must survive Off so the browser can turn distractions back on. Only start
 # it for configured installs, and only on prompts (not every tool event).
@@ -308,9 +317,7 @@ OPEN_MODE=""
 FIRST=""
 if [ "$EVENT $STATE $REASON" = "UserPromptSubmit working prompt" ] && [ -n "$SESSION" ] &&
    [ ! -f "$DIR/off" ] && [ ! -f "$DIR/no-auto-open" ]; then
-  ORIGIN=unknown
   case "$AGENT" in
-    codex) ORIGIN=$(printf '%s' "$INPUT" | python3 "$HERE/codex-context.py" prompt-origin 2>/dev/null) ;;
     claude-code)
       case "$(field transcript_path)" in
         */subagents/*) ;;

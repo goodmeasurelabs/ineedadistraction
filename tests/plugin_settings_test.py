@@ -294,8 +294,11 @@ class SettingsTests(unittest.TestCase):
             file.write_text(text)
             file.chmod(0o755)
         env = {"INAD_HOME": str(self.root), "INAD_URL": "http://127.0.0.1:1", "PATH": str(bin_dir) + ":" + os.environ["PATH"]}
+        transcript = self.root / "transcript.jsonl"
+        transcript.write_text(json.dumps({"type": "session_meta", "payload": {"id": "isolated-session", "source": "vscode", "thread_source": "user"}}) + "\n")
         for state, reason, hook in [("working", "prompt", "UserPromptSubmit"), ("waiting", "done", "Stop"), ("working", "prompt", "UserPromptSubmit")]:
-            result = subprocess.run(["/bin/sh", str(SCRIPT.with_name("state.sh")), state, reason, "codex"], input=json.dumps({"hook_event_name": hook, "session_id": "isolated-session"}), env=env, capture_output=True, text=True, timeout=5)
+            event = {"hook_event_name": hook, "session_id": "isolated-session", "transcript_path": str(transcript)}
+            result = subprocess.run(["/bin/sh", str(SCRIPT.with_name("state.sh")), state, reason, "codex"], input=json.dumps(event), env=env, capture_output=True, text=True, timeout=5)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual((self.root / "last").read_text(), state + " " + reason + " codex")
             self.assertTrue((self.root / "off").exists())

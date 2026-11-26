@@ -72,9 +72,9 @@ def read_marker(path):
             "answered_indices": sorted(set(answered))}
 
 
-def hook_input():
-    raw = sys.stdin.buffer.read(INPUT_BYTES + 1)
-    if len(raw) > INPUT_BYTES:
+def hook_input(limit=INPUT_BYTES):
+    raw = sys.stdin.buffer.read(limit + 1)
+    if len(raw) > limit:
         raise ValueError("hook input too large")
     event = json.loads(raw)
     if not isinstance(event, dict):
@@ -82,26 +82,48 @@ def hook_input():
     return event
 
 
-def prompt_origin():
-    """Identify interactive root sessions from their header, without reading turn content."""
-    event = hook_input()
-    if event.get("hook_event_name") != "UserPromptSubmit":
-        return "unknown"
+def saved_thread_meta(session, transcript):
+    """Read only routing fields when Codex has indexed a rollout before its header is readable."""
+    directory = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
+    database = directory / "state_5.sqlite"
+    if not database.is_file():
+        return None
+    try:
+        import sqlite3
+    except ImportError:
+        return None
+    try:
+        with contextlib.closing(sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True, timeout=0.1)) as db:
+            row = db.execute("SELECT source, thread_source FROM threads WHERE id=? AND rollout_path=?",
+                             (session, transcript)).fetchone()
+    except sqlite3.Error:
+        return None
+    if row and row[1]:
+        return {"id": session, "source": row[0], "thread_source": row[1]}
+    return None
+
+
+def session_origin(event):
+    """Classify the session for every hook using routing metadata only."""
     if event.get("agent_id") or event.get("agent_type"):
         return "internal"
     session = event.get("session_id")
     transcript = event.get("transcript_path")
     if not isinstance(session, str) or not session or not isinstance(transcript, str) or not transcript:
         return "unknown"
-    with Path(transcript).open("rb") as stream:
-        header = stream.readline(INPUT_BYTES + 1)
-    if not header or len(header) > INPUT_BYTES:
-        return "unknown"
-    record = json.loads(header)
-    if record.get("type") != "session_meta":
-        return "unknown"
-    meta = record.get("payload")
-    if not isinstance(meta, dict):
+    try:
+        with Path(transcript).open("rb") as stream:
+            # Session headers can include long base instructions.
+            header = stream.readline(TAIL_BYTES + 1)
+        if len(header) > TAIL_BYTES:
+            raise ValueError("oversized session header")
+        record = json.loads(header)
+        if not isinstance(record, dict) or record.get("type") != "session_meta":
+            return "unknown"
+        meta = record.get("payload")
+    except (OSError, ValueError, RecursionError):
+        meta = saved_thread_meta(session, transcript)
+    if not isinstance(meta, dict) or not meta.get("id"):
         return "unknown"
     # Child sessions can share the main session_id; id identifies the individual thread.
     if session not in (meta.get("id"), meta.get("session_id")):
@@ -309,8 +331,12 @@ def pending(directory, transcript):
 def main():
     os.umask(0o077)
     try:
-        if len(sys.argv) == 2 and sys.argv[1] == "prompt-origin":
-            print(prompt_origin())
+        if len(sys.argv) == 2 and sys.argv[1] in ("prompt-origin", "session-origin"):
+            event = hook_input(TAIL_BYTES)
+            if sys.argv[1] == "prompt-origin" and event.get("hook_event_name") != "UserPromptSubmit":
+                print("unknown")
+            else:
+                print(session_origin(event))
             return 0
         if len(sys.argv) == 2 and sys.argv[1] == "approval":
             print(approval())
@@ -324,7 +350,7 @@ def main():
     except (OSError, ValueError, TypeError, AttributeError, RecursionError):
         pass
     # No exception text: it could include a path or untrusted transcript content.
-    if len(sys.argv) > 1 and sys.argv[1] == "prompt-origin":
+    if len(sys.argv) > 1 and sys.argv[1] in ("prompt-origin", "session-origin"):
         print("unknown")
     elif len(sys.argv) > 1 and sys.argv[1] == "pending":
         print("pending")
